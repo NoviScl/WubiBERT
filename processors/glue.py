@@ -89,6 +89,7 @@ class DataProcessor(object):
                 lines.append(line)
             return lines
 
+
 class TnewsProcessor(DataProcessor):
     "Processor for TNews dataset"
 
@@ -161,6 +162,165 @@ class IflytekProcessor(DataProcessor):
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=None,
                              label=label))
+        return examples
+
+
+class WscProcessor(DataProcessor):
+    """Processor for the WSC data set (CLUE version)."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "train.json")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "dev.json")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "test.json")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["true", "false"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = "%s-%s" % (set_type, i)
+            text_a = line['text']
+            text_a_list = list(text_a)
+            target = line['target']
+            query = target['span1_text']
+            query_idx = target['span1_index']
+            pronoun = target['span2_text']
+            pronoun_idx = target['span2_index']
+            assert text_a[pronoun_idx: (pronoun_idx + len(pronoun))] == pronoun, "pronoun: {}".format(pronoun)
+            assert text_a[query_idx: (query_idx + len(query))] == query, "query: {}".format(query)
+            if pronoun_idx > query_idx:
+                text_a_list.insert(query_idx, "_")
+                text_a_list.insert(query_idx + len(query) + 1, "_")
+                text_a_list.insert(pronoun_idx + 2, "[")
+                text_a_list.insert(pronoun_idx + len(pronoun) + 2 + 1, "]")
+            else:
+                text_a_list.insert(pronoun_idx, "[")
+                text_a_list.insert(pronoun_idx + len(pronoun) + 1, "]")
+                text_a_list.insert(query_idx + 2, "_")
+                text_a_list.insert(query_idx + len(query) + 2 + 1, "_")
+            text_a = "".join(text_a_list)
+            text_b = None
+            label = str(line['label']) if set_type != 'test' else 'true'
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+
+class AfqmcProcessor(DataProcessor):
+    """Processor for the AFQMC data set (CLUE version)."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "train.json")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "dev.json")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "test.json")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = "%s-%s" % (set_type, i)
+            text_a = line['sentence1']
+            text_b = line['sentence2']
+            label = str(line['label']) if set_type != 'test' else "0"
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+
+class CslProcessor(DataProcessor):
+    """Processor for the CSL data set (CLUE version)."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "train.json")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "dev.json")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "test.json")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = "%s-%s" % (set_type, i)
+            text_a = " ".join(line['keyword'])
+            text_b = line['abst']
+            label = str(line['label']) if set_type != 'test' else '0'
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+
+class OcnliProcessor(DataProcessor):
+    """Processor for the CMNLI data set (CLUE version)."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "train.json")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "dev.json")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "test.json")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["contradiction", "entailment", "neutral"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = "%s-%s" % (set_type, i)
+            text_a = line["sentence1"]
+            text_b = line["sentence2"]
+            label = str(line["label"]) if set_type != 'test' else 'neutral'
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
 
@@ -320,6 +480,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
 
     features = []
     for (ex_index, example) in enumerate(examples):
+        # in OCNLI, examples with label = '-' should be skipped
+        if example.label == '-':
+            continue
         tokens_a = tokenizer.tokenize(example.text_a)
 
         tokens_b = None
@@ -360,7 +523,13 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             segment_ids += [1] * (len(tokens_b) + 1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        # print (tokens, input_ids)
+        # print("tokens")
+        # for token in tokens:
+        #     print(token)
+        #     print(token.encode("utf-8"))
+        # print("input_ids")
+        # print(input_ids)
+        # exit(0)
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
@@ -375,6 +544,8 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
+
+        # print(example)
 
         label_id = label_map[example.label]
 
@@ -409,5 +580,9 @@ PROCESSORS = {
     "mrpc": MrpcProcessor,
     "sst-2": Sst2Processor,
     "tnews": TnewsProcessor,
-    "iflytek": IflytekProcessor
+    "iflytek": IflytekProcessor,
+    'wsc': WscProcessor,
+    'afqmc': AfqmcProcessor,
+    'ocnli': OcnliProcessor,
+    'csl': CslProcessor,
 }

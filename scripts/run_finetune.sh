@@ -17,29 +17,38 @@ set -e
 
 echo "Container nvidia build = " $NVIDIA_BUILD_ID
 
-# init_checkpoint=${1:-"results/checkpoints_bert_zh_22675/ckpt_8601.pt"}
-init_checkpoint=${1:-"logs/tnews_bert_zh/pytorch_model.bin_2"}
+# Model
+# init_checkpoint=${1:-"results/checkpoints_concat_sep/ckpt_8601.pt"}
+# init_checkpoint=${1:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
 # init_checkpoint=${1:-"/data04/scl/bert-base-chinese"}
-data_dir=${2:-"/mnt/nfs/home/scl/tnews_public/tnews"}
-# data_dir=${2:-"/mnt/nfs/home/scl/iflytek_public/rare"}
-vocab_file=${3:-"tokenizers/bert_chinese_uncased_22675.vocab"}
-# vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
-config_file=${4:-"bert_config_vocab22675.json"}
+# init_checkpoint=${init_checkpoint:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
+init_checkpoint=${init_checkpoint:-"results/checkpoints_raw_zh/ckpt_8601.pt"}
 # config_file=${4:-"/data04/scl/bert-base-chinese/config.json"}
-out_dir=${5:-"logs/tnews_bert_zh"}
-task_name=${6:-"tnews"}
-num_gpu=${7:-"4"}
-batch_size=${8:-"64"}
-gradient_accumulation_steps=${9:-"1"}
+# config_file=${config_file:-"configs/bert_config_vocab30k.json"}
+config_file=${config_file:-"configs/bert_config_vocab30k.json"}
+# vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
+vocab_file=${vocab_file:-"tokenizers/sp_raw_zh_30k.vocab"}
+vocab_model_file=${vocab_model_file:-"tokenizers/sp_raw_zh_30k.model"}
+tokenizer_type=${tokenizer_type:-"RawZh"}
+
+# Dataset
+task_name=${task_name:-"csl"}
+data_dir=${data_dir:-"datasets/$task_name"}
+
+seed=${seed:-"2"}
+out_dir=${out_dir:-"logs/temp"}
+# mode=${mode:-"prediction"}
+mode=${mode:-"train eval"}
+num_gpu=${num_gpu:-"1"}
+
+# Hyperparameters
+epochs=${epochs:-"4"}
+max_steps=${13:-"-1.0"}
+batch_size=${batch_size:-"32"}
+gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
-epochs=${12:-"4"}
-max_steps=${13:-"-1.0"}
-precision=${14:-"fp16"}
-seed=${15:-"2"}
-mode=${16:-"prediction"}
-tokenizer_type=${17:-"BertZh"}
-vocab_model_file=${18:-"tokenizers/sp_raw_zh_30k.model"}
+# precision=${14:-"fp16"}
 
 mkdir -p $out_dir
 
@@ -58,7 +67,7 @@ if [ "$num_gpu" = "1" ] ; then
   mpi_command=""
 else
   unset CUDA_VISIBLE_DEVICES
-  mpi_command=" -m torch.distributed.launch --master_port=4233333 --nproc_per_node=$num_gpu"
+  mpi_command=" -m torch.distributed.launch --master_port=423333 --nproc_per_node=$num_gpu"
 fi
 
 CMD="python3 $mpi_command run_glue.py "
@@ -67,11 +76,11 @@ if [[ $mode == *"train"* ]] ; then
   CMD+="--do_train "
   CMD+="--train_batch_size=$batch_size "
 fi
-if [[ $mode == *"eval"* ]] || [[ $mode == *"prediction"* ]]; then
+if [[ $mode == *"eval"* ]] || [[ $mode == *"pred"* ]]; then
   if [[ $mode == *"eval"* ]] ; then
     CMD+="--do_eval "
   fi
-  if [[ $mode == *"prediction"* ]] ; then
+  if [[ $mode == *"pred"* ]] ; then
     CMD+="--do_predict "
   fi
   CMD+="--eval_batch_size=$batch_size "
@@ -95,6 +104,6 @@ CMD+="--config_file=$config_file "
 CMD+="--output_dir $out_dir "
 CMD+="$use_fp16"
 
-LOGFILE=$out_dir/logfile
+LOGFILE=$out_dir/$seed/logfile
 
 $CMD |& tee $LOGFILE

@@ -17,25 +17,35 @@ set -e
 
 echo "Container nvidia build = " $NVIDIA_BUILD_ID
 
-# init_checkpoint=${1:-"results/checkpoints_wubi_zh/ckpt_8601.pt"}
+init_checkpoint=${1:-"results/checkpoints_wubi_zh/ckpt_8601.pt"}
 # init_checkpoint=${1:-"logs/iflytek_wubi_zh/pytorch_model.bin_3"}
-init_checkpoint=${1:-"/data04/scl/bert-base-chinese"}
-data_dir=${2:-"/mnt/nfs/home/scl/iflytek_public/iflytek"}
+# init_checkpoint=${1:-"/data04/scl/bert-base-chinese"}
+
+# data_dir=${2:-"/mnt/nfs/home/scl/iflytek_public/iflytek"}
 # data_dir=${2:-"/mnt/nfs/home/scl/iflytek_public/rare"}
-# vocab_file=${3:-"tokenizers/sp_wubi_zh_30k_sep.vocab"}
-vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
-# config_file=${4:-"bert_config_vocab30k.json"}
-config_file=${4:-"/data04/scl/bert-base-chinese/config.json"}
+data_dir=${2:-"results/datasets/iflytek_public/iflytek"}
+
+vocab_file=${3:-"tokenizers/sp_wubi_zh_30k_sep.vocab"}
+# vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
+
+config_file=${4:-"configs/bert_config_vocab30k.json"}
+# config_file=${4:-"/data04/scl/bert-base-chinese/config.json"}
+
 out_dir=${5:-"logs/iflytek_wubi_zh"}
+out_dir=${5:-"logs/iflytek_raw_zh"}
+out_dir=${5:-"logs/iflytek_concat_zh"}
+out_dir=${5:-"logs/iflytek_wubi_zh"}
+
+
 task_name=${6:-"iflytek"}
-num_gpu=${7:-"4"}
+num_gpu=${7:-"1"}
 batch_size=${8:-"64"}
 gradient_accumulation_steps=${9:-"1"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
 epochs=${12:-"5"}
 max_steps=${13:-"-1.0"}
-precision=${14:-"fp16"}
+# precision=${14:-"fp16"}
 seed=${15:-"2"}
 mode=${16:-"train eval"}
 tokenizer_type=${17:-"WubiZh"}
@@ -95,6 +105,8 @@ CMD+="--config_file=$config_file "
 CMD+="--output_dir $out_dir "
 CMD+="$use_fp16"
 
-LOGFILE=$out_dir/logfile
+LOGFILE=$out_dir/$seed/logfile
 
-$CMD |& tee $LOGFILE
+echo "Command\n"
+echo "$CMD"
+# $CMD |& tee $LOGFILE

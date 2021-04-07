@@ -17,29 +17,38 @@ set -e
 
 echo "Container nvidia build = " $NVIDIA_BUILD_ID
 
+# Model
 # init_checkpoint=${1:-"results/checkpoints_concat_sep/ckpt_8601.pt"}
-init_checkpoint=${1:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
+# init_checkpoint=${1:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
 # init_checkpoint=${1:-"/data04/scl/bert-base-chinese"}
-data_dir=${2:-"/mnt/nfs/home/scl/tnews_public/tnews"}
-# data_dir=${2:-"/mnt/nfs/home/scl/iflytek_public/rare"}
-vocab_file=${3:-"tokenizers/sp_concat_30k_sep.vocab"}
-# vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
-config_file=${4:-"bert_config_vocab30k.json"}
+init_checkpoint=${init_checkpoint:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
 # config_file=${4:-"/data04/scl/bert-base-chinese/config.json"}
-out_dir=${5:-"logs/tnews_concat_sep"}
-task_name=${6:-"tnews"}
-num_gpu=${7:-"4"}
-batch_size=${8:-"64"}
-gradient_accumulation_steps=${9:-"1"}
+config_file=${config_file:-"configs/bert_config_vocab30k.json"}
+# vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
+vocab_file=${vocab_file:-"tokenizers/sp_concat_30k_sep.vocab"}
+vocab_model_file=${vocab_model_file:-"tokenizers/sp_concat_30k_sep.model"}
+tokenizer_type=${tokenizer_type:-"ConcatSep"}
+
+# Dataset
+# data_dir=${2:-"/mnt/nfs/home/scl/tnews_public/tnews"}
+# data_dir=${2:-"/mnt/nfs/home/scl/iflytek_public/rare"}
+data_dir=${data_dir:-"results/datasets/tnews_public/tnews"}
+task_name=${task_name:-"tnews"}
+
+seed=${seed:-"2"}
+out_dir=${out_dir:-"logs/tnews_concat_sep"}
+# mode=${mode:-"prediction"}
+mode=${mode:-"train eval"}
+num_gpu=${num_gpu:-"1"}
+
+# Hyperparameters
+batch_size=${batch_size:-"32"}
+gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
-epochs=${12:-"4"}
+epochs=${epochs:-"4"}
 max_steps=${13:-"-1.0"}
-precision=${14:-"fp16"}
-seed=${15:-"2"}
-mode=${16:-"prediction"}
-tokenizer_type=${17:-"ConcatSep"}
-vocab_model_file=${18:-"tokenizers/sp_concat_30k_sep.model"}
+# precision=${14:-"fp16"}
 
 mkdir -p $out_dir
 
@@ -67,11 +76,11 @@ if [[ $mode == *"train"* ]] ; then
   CMD+="--do_train "
   CMD+="--train_batch_size=$batch_size "
 fi
-if [[ $mode == *"eval"* ]] || [[ $mode == *"prediction"* ]]; then
+if [[ $mode == *"eval"* ]] || [[ $mode == *"pred"* ]]; then
   if [[ $mode == *"eval"* ]] ; then
     CMD+="--do_eval "
   fi
-  if [[ $mode == *"prediction"* ]] ; then
+  if [[ $mode == *"pred"* ]] ; then
     CMD+="--do_predict "
   fi
   CMD+="--eval_batch_size=$batch_size "
@@ -95,6 +104,6 @@ CMD+="--config_file=$config_file "
 CMD+="--output_dir $out_dir "
 CMD+="$use_fp16"
 
-LOGFILE=$out_dir/logfile
+LOGFILE=$out_dir/$seed/logfile
 
 $CMD |& tee $LOGFILE

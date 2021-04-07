@@ -24,13 +24,13 @@ from torch.nn.utils import clip_grad_norm_
 #from fused_adam_local import FusedAdam
 from apex.optimizers import FusedAdam
 from apex.multi_tensor_apply import multi_tensor_applier
-import amp_C
+# import amp_C
 from utils import is_main_process
 
-multi_tensor_l2norm = amp_C.multi_tensor_l2norm
-lamb_compute_update = amp_C.multi_tensor_lamb_stage1_cuda
-lamb_apply_update = amp_C.multi_tensor_lamb_stage2_cuda
-scale = amp_C.multi_tensor_scale
+# multi_tensor_l2norm = amp_C.multi_tensor_l2norm
+# lamb_compute_update = amp_C.multi_tensor_lamb_stage1_cuda
+# lamb_apply_update = amp_C.multi_tensor_lamb_stage2_cuda
+# scale = amp_C.multi_tensor_scale
 
 
 def warmup_cosine(x, warmup=0.002):
@@ -172,3 +172,44 @@ class BertAdam(Optimizer):
                 state['step'] += 1
 
         return loss
+
+def get_optimizer(model, float16, learning_rate, total_steps, schedule,
+                  warmup_rate, weight_decay_rate, max_grad_norm, opt_pooler=False):
+    # Prepare optimizer
+    assert 0.0 <= warmup_rate <= 1.0
+    param_optimizer = list(model.named_parameters())
+
+    # hack to remove pooler, which is not used
+    # thus it produce None grad that break apex
+    if opt_pooler is False:
+        param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_parameters = [
+        {'params': [p for n, p in param_optimizer if not any([nd in n for nd in no_decay])],
+         'weight_decay_rate': weight_decay_rate},
+        {'params': [p for n, p in param_optimizer if any([nd in n for nd in no_decay])],
+         'weight_decay_rate': 0.0}
+    ]
+    if float16:
+        try:
+            from apex.contrib.optimizers import FP16_Optimizer
+            from apex.contrib.optimizers import FusedAdam
+        except ImportError:
+            raise ImportError(
+                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+
+        optimizer = FusedAdam(optimizer_parameters,
+                              lr=learning_rate,
+                              bias_correction=False,
+                              max_grad_norm=max_grad_norm)
+        optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+    else:
+        optimizer = BertAdam(params=optimizer_parameters,
+                             lr=learning_rate,
+                             warmup=warmup_rate,
+                             max_grad_norm=max_grad_norm,
+                             t_total=total_steps,
+                             schedule=schedule,
+                             weight_decay=weight_decay_rate)
+
+    return optimizer

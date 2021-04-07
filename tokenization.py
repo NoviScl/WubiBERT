@@ -109,8 +109,8 @@ def load_vocab_spm(vocab_file):
             index += 1
     return vocab
 
-WUBI2CH = "/mnt/nfs/home/scl/LanguageModeling/BERT/data/wubi_to_chinese_unique.pkl"
-CH2WUBI = "/mnt/nfs/home/scl/LanguageModeling/BERT/data/chinese_to_wubi_unique.pkl"
+WUBI2CH = "data/wubi_to_chinese_unique.pkl"
+CH2WUBI = "data/chinese_to_wubi_unique.pkl"
 control_char = u'0123456789abcdefghijklmnopqrstuvwxyz' 
 control_uni = [chr(ord(c)+50000) for c in control_char]
 

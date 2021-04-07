@@ -25,6 +25,7 @@ import random
 # import wget
 import json
 import time
+from shutil import copyfile
 
 import dllogger
 import numpy as np
@@ -55,7 +56,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-all_tokenizers = {
+ALL_TOKENIZERS = {
     "ConcatSep": ConcatSepTokenizer,
     "WubiZh": WubiZhTokenizer,
     "RawZh": RawZhTokenizer,
@@ -447,7 +448,57 @@ def dump_predictions(path, label_map, preds, examples):
         json.dump(predictions, writer)
 
 
+def get_tokenization_result(args):
+    vocab_files = [
+        "sp_wubi_zh_30k_sep.vocab",
+        "sp_raw_zh_30k.vocab",
+        "sp_concat_30k_sep.vocab",
+        "bert_chinese_uncased_22675.vocab",
+    ]
+    tokenizer_types = [
+        "WubiZh",
+        "RawZh",
+        "ConcatSep",
+        "BertZh",
+    ]
+    vocab_model_files = [
+        "sp_wubi_zh_30k_sep.model",
+        "sp_raw_zh_30k.model",
+        "sp_concat_30k_sep.model",
+        "bert_chinese_uncased_22675.model",
+    ]
+    for i in range(4):
+        tokenizer_type = tokenizer_types[i]
+        vocab_file = 'tokenizers/' + vocab_files[i]
+        vocab_model_file = 'tokenizers/' + vocab_model_files[i]
+        out_file = 'tokenize_results/' + vocab_files[i][:-6]
+        tokenizer = ALL_TOKENIZERS[tokenizer_type](vocab_file, vocab_model_file)
+        filename = args.data_dir + '/dev.json'
+        lines = open(filename, 'r').readlines()
+        lines = lines[:100]
+        examples = [json.loads(line) for line in lines]
+        tokenized = []
+        for ex in examples:
+            abst = ex['abst']
+            keywords = ' '.join(ex['keyword'])
+            abst = tokenizer.tokenize(abst)
+            keywords = tokenizer.tokenize(keywords)
+            tokenized.append({
+                'abst': abst,
+                'keywords': keywords,
+            })
+        with open(out_file + '.txt', 'w', encoding='utf-8') as f:
+            for t in tokenized:
+                f.write(json.dumps(t, ensure_ascii=False))
+                f.write('\n')
+    exit(0)
+
+
 def main(args):
+    print("main() in run_glue.py")
+    logger.info("Arguments:")
+    logger.info(json.dumps(vars(args), indent=4))
+    output_dir = args.output_dir + "/" + str(args.seed)
     args.fp16 = args.fp16 or args.amp
     if args.server_ip and args.server_port:
         # Distant debugging - see
@@ -485,17 +536,17 @@ def main(args):
                          "`do_predict` must be True.")
 
     if is_main_process():
-        if (os.path.exists(args.output_dir) and os.listdir(args.output_dir) and
+        if (os.path.exists(output_dir) and os.listdir(output_dir) and
                 args.do_train):
             logger.warning("Output directory ({}) already exists and is not "
-                           "empty.".format(args.output_dir))
-    mkdir_by_main_process(args.output_dir)
+                           "empty.".format(output_dir))
+    mkdir_by_main_process(output_dir)
 
     if is_main_process():
         dllogger.init(backends=[
             dllogger.JSONStreamBackend(
                 verbosity=dllogger.Verbosity.VERBOSE,
-                filename=os.path.join(args.output_dir, 'dllogger.json'),
+                filename=os.path.join(output_dir, 'dllogger.json'),
             ),
             dllogger.StdOutBackend(
                 verbosity=dllogger.Verbosity.VERBOSE,
@@ -537,10 +588,13 @@ def main(args):
     #     do_lower_case=args.do_lower_case,
     #     max_len=512,
     # )  # for bert large
-    tokenizer = all_tokenizers[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+
 
     num_train_optimization_steps = None
     if args.do_train:
+        print('start training')
+        exit(0)
         train_features = get_train_features(
             args.data_dir,
             args.bert_model,
@@ -644,7 +698,23 @@ def main(args):
         nb_tr_examples = 0
         model.train()
         tic_train = time.perf_counter()
+
+        train_acc_history = []
+        eval_acc_history = []
+        train_loss_history = []
+        eval_loss_history = []
+        filename_scores = os.path.join(output_dir, "scores.txt")
+        with open(filename_scores, 'w') as f:
+            f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
+
+        # Save config
+        model_to_save = model.module if hasattr(model, 'module') else model
+        with open(os.path.join(output_dir, modeling.CONFIG_NAME, 'w')) as f:
+            f.write(model_to_save.config.to_json_string())
+
+
         for ep in trange(int(args.num_train_epochs), desc="Epoch"):
+            # Train
             model.train()
             tr_loss, nb_tr_steps = 0, 0
             for step, batch in enumerate(
@@ -682,6 +752,7 @@ def main(args):
                     optimizer.zero_grad()
                     global_step += 1
             
+            # Evaluation
             if (args.do_eval or args.do_predict) and is_main_process():
                 eval_examples = processor.get_dev_examples(args.data_dir)
                 eval_features, label_map = convert_examples_to_features(
@@ -771,23 +842,28 @@ def main(args):
                     'infer:throughput(samples/s):avg': eval_throughput,
                 })
                 preds = np.argmax(preds, axis=1)
+                
+                # Save predictions
                 if args.do_predict:
                     dump_predictions(
-                        os.path.join(args.output_dir, 'predictions.json'),
+                        os.path.join(output_dir, 'predictions.json'),
                         label_map,
                         preds,
                         eval_examples,
                     )
+
+                # Update results
                 if args.do_eval:
                     results['eval:loss'] = eval_loss / nb_eval_steps
                     eval_result = compute_metrics(args.task_name, preds, out_label_ids)
                     results.update(eval_result)
 
+                # Log
                 if is_main_process():
                     logger.info("***** Results *****")
                     for key in sorted(results.keys()):
                         logger.info("  %s = %s", key, str(results[key]))
-                    with open(os.path.join(args.output_dir, "results.txt"), "w") as writer:
+                    with open(os.path.join(output_dir, "results.txt"), "w") as writer:
                         json.dump(results, writer)
                     dllogger_queries_from_results = {
                         'exact_match': 'acc',
@@ -806,18 +882,41 @@ def main(args):
                             step=tuple(),
                             data={key: convert(results[results_key])},
                         )
+                
+                # Save history scores
+                if args.do_eval:
+                    eval_acc = results['acc']
+                    eval_loss = results['eval:loss']
+                    train_loss = tr_loss / nb_tr_steps
 
+                    eval_loss_history.append(eval_loss)
+                    eval_acc_history.append(eval_acc)
+
+                    with open(filename_scores, 'a') as f:
+                        f.write(f"{ep}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
+
+            train_loss_history.append(tr_loss / nb_tr_steps)
+
+            # Save model
             if is_main_process() and not args.skip_checkpoint:
                 model_to_save = model.module if hasattr(model, 'module') else model
+                model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
                 torch.save(
                     {"model": model_to_save.state_dict()},
-                    os.path.join(args.output_dir, modeling.WEIGHTS_NAME + '_' + str(ep)),
+                    model_filename,
                 )
-                with open(
-                        os.path.join(args.output_dir, modeling.CONFIG_NAME + '_' + str(ep)),
-                        'w',
-                ) as f:
-                    f.write(model_to_save.config.to_json_string())
+                # with open(
+                #         os.path.join(output_dir, modeling.CONFIG_NAME + '_' + str(ep)),
+                #         'w',
+                # ) as f:
+                #     f.write(model_to_save.config.to_json_string())
+
+                # Check if it's best model
+                if args.do_eval:
+                    if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
+                        best_model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
+                        copyfile(model_filename, best_model_filename)
+                        logger.info("New best model saved")
 
         latency_train = time.perf_counter() - tic_train
         tr_loss = tr_loss / nb_tr_steps
@@ -835,7 +934,7 @@ def main(args):
             'train:throughput':
                 get_world_size() * nb_tr_examples / latency_train,
         })
-        
+
 
 
     # if args.do_eval and is_main_process():
@@ -928,7 +1027,7 @@ def main(args):
     #     preds = np.argmax(preds, axis=1)
     #     # if args.do_predict:
     #     #     dump_predictions(
-    #     #         os.path.join(args.output_dir, 'predictions.json'),
+    #     #         os.path.join(output_dir, 'predictions.json'),
     #     #         label_map,
     #     #         preds,
     #     #         eval_examples,
@@ -939,7 +1038,7 @@ def main(args):
     #     eval_result = compute_metrics(args.task_name, preds, out_label_ids)
     #     results.update(eval_result)
     
-
+    # Test
     if args.do_predict and is_main_process():
         eval_examples = processor.get_test_examples(args.data_dir)
         eval_features, label_map = convert_examples_to_features(
@@ -1030,7 +1129,7 @@ def main(args):
         preds = np.argmax(preds, axis=1)
         # if args.do_predict:
         #     dump_predictions(
-        #         os.path.join(args.output_dir, 'predictions.json'),
+        #         os.path.join(output_dir, 'predictions.json'),
         #         label_map,
         #         preds,
         #         eval_examples,
@@ -1042,12 +1141,12 @@ def main(args):
         results.update(eval_result)
 
 
-
+    # Log
     if is_main_process():
         logger.info("***** Results *****")
         for key in sorted(results.keys()):
             logger.info("  %s = %s", key, str(results[key]))
-        with open(os.path.join(args.output_dir, "results.txt"), "w") as writer:
+        with open(os.path.join(output_dir, "results.txt"), "w") as writer:
             json.dump(results, writer)
         dllogger_queries_from_results = {
             'exact_match': 'acc',
@@ -1072,4 +1171,5 @@ def main(args):
 
 
 if __name__ == "__main__":
+    print("run_glue.py")
     main(parse_args())
