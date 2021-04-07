@@ -407,7 +407,7 @@ def gen_tensor_dataset(features):
 def get_train_features(data_dir, bert_model, max_seq_length, do_lower_case,
                        local_rank, train_batch_size,
                        gradient_accumulation_steps, num_train_epochs, tokenizer,
-                       processor):
+                       processor, is_fewshot=False):
     cached_train_features_file = os.path.join(
         data_dir,
         '{0}_{1}_{2}'.format(
@@ -425,7 +425,12 @@ def get_train_features(data_dir, bert_model, max_seq_length, do_lower_case,
     # except:
     # logger.info("Did not find pre-processed features from {}".format(
     #     cached_train_features_file))
-    train_examples = processor.get_train_examples(data_dir)
+    if is_fewshot:
+        train_dir = os.path.join(data_dir, 'fewshot')
+        train_examples = processor.get_train_examples(train_dir)
+    else:
+        train_examples = processor.get_train_examples(data_dir)
+        
     train_features, _ = convert_examples_to_features(
         train_examples,
         processor.get_labels(),
@@ -500,15 +505,19 @@ def main(args):
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
 
-    if fewshot == 0:
+    # Setup output files
+    if args.fewshot == 0:
         output_dir = os.path.join(args.output_dir, str(args.seed))
+        is_fewshot = False
     else:
         output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
+        is_fewshot = True
+    os.makedirs(output_dir, exist_ok=True)
     filename_params = os.path.join(output_dir, 'params.json')
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
 
 
-    output_dir = args.output_dir + "/" + str(args.seed)
+    
     args.fp16 = args.fp16 or args.amp
     if args.server_ip and args.server_port:
         # Distant debugging - see
@@ -582,6 +591,7 @@ def main(args):
     args.train_batch_size = (args.train_batch_size //
                              args.gradient_accumulation_steps)
 
+    # Set seed
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -589,17 +599,10 @@ def main(args):
         torch.cuda.manual_seed_all(args.seed)
     dllogger.log(step="PARAMETER", data={"SEED": args.seed})
 
+    logger.info('Loading tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
-
-    #tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    # tokenizer = BertTokenizer(
-    #     args.vocab_file,
-    #     do_lower_case=args.do_lower_case,
-    #     max_len=512,
-    # )  # for bert large
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
-
 
     num_train_optimization_steps = None
     if args.do_train:
@@ -615,6 +618,7 @@ def main(args):
             args.num_train_epochs,
             tokenizer,
             processor,
+            is_fewshot=is_fewshot,
         )
         num_train_optimization_steps = int(
             len(train_features) / args.train_batch_size /
@@ -720,7 +724,8 @@ def main(args):
 
         # Save config
         model_to_save = model.module if hasattr(model, 'module') else model
-        with open(os.path.join(output_dir, modeling.CONFIG_NAME, 'w')) as f:
+        filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
+        with open(filename_config, 'w') as f:
             f.write(model_to_save.config.to_json_string())
 
 
@@ -773,6 +778,7 @@ def main(args):
                     tokenizer,
                 )
                 logger.info("***** Running evaluation *****")
+                logger.info("  Epoch = %d", ep)
                 logger.info("  Num examples = %d", len(eval_examples))
                 logger.info("  Batch size = %d", args.eval_batch_size)
                 eval_data = gen_tensor_dataset(eval_features)
@@ -872,8 +878,14 @@ def main(args):
                 # Log
                 if is_main_process():
                     logger.info("***** Results *****")
-                    for key in sorted(results.keys()):
-                        logger.info("  %s = %s", key, str(results[key]))
+                    eval_acc = results['acc']
+                    eval_loss = results['eval:loss']
+                    train_loss = tr_loss / nb_tr_steps
+                    logger.info(f'train loss: {train_loss}')
+                    logger.info(f'eval loss:  {eval_loss}')
+                    logger.info(f'eval acc:   {eval_acc}')
+                    # for key in sorted(results.keys()):
+                    #     logger.info("  %s = %s", key, str(results[key]))
                     with open(os.path.join(output_dir, "results.txt"), "w") as writer:
                         json.dump(results, writer)
                     dllogger_queries_from_results = {
@@ -911,7 +923,9 @@ def main(args):
             # Save model
             if is_main_process() and not args.skip_checkpoint:
                 model_to_save = model.module if hasattr(model, 'module') else model
-                model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
+                model_dir = os.path.join(output_dir, 'models')
+                os.makedirs(model_dir, exist_ok=True)
+                model_filename = os.path.join(model_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
                 torch.save(
                     {"model": model_to_save.state_dict()},
                     model_filename,
@@ -1178,6 +1192,8 @@ def main(args):
             )
 
     dllogger.flush()
+
+    print('Training finished')
     return results
 
 

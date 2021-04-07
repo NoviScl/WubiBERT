@@ -55,26 +55,43 @@ output_dirs=(
 )
 
 seeds=(
-    # "2"
-    "23"
-    "234"
+    "2"
+    # "23"
+    # "234"
 )
 
 # Change these
-task_name="chid"
+# task_name="tnews"
+# task_name="iflytek"
+# task_name="wsc"
+# task_name="afqmc"
+# task_name="csl"
+# task_name="ocnli"
+task_name="c3"
 script="./scripts/run_mrc_${task_name}.sh"  # MRC tasks
 # script="./scripts/run_finetune.sh"          # classification
-# epochs=8  # C3
+
 # epochs=6  # All 6 classification tasks
+epochs=8  # C3
 # epochs=3  # cmrc
-epochs=4  # chid
+# epochs=4  # chid
+batch_size=24
+gradient_accumulation_steps=1
+
+# Fewshot
+# fewshot=1       # 1 = true
+# epochs=50
+# batch_size=4
+# gradient_accumulation_steps=1
 
 
 data_dir="datasets/${task_name}"
 
+
+# Don't change below
 for seed in ${seeds[@]}
 do
-    for i in {0..2}
+    for i in {2..2}
     do
         # Model
         init_checkpoint="results/${init_checkpoints[$i]}"
@@ -86,7 +103,7 @@ do
         # Input (data) and output (result)
         output_dir="logs/${task_name}/${output_dirs[$i]}"
 
-        echo $init_checkpoint
+        # echo $init_checkpoint
         echo $output_dir
         echo $seed
 
@@ -110,6 +127,9 @@ out_dir="$output_dir",\
 data_dir="$data_dir",\
 seed=$seed,\
 epochs=$epochs,\
+fewshot=$fewshot,\
+batch_size=$batch_size,\
+gradient_accumulation_steps=$gradient_accumulation_steps,\
 mode="train eval" \
         ${script}
     done

@@ -26,7 +26,7 @@ python3 run_c3.py \
   --num_train_epochs=${epochs} \
   --train_batch_size=24 \
   --eval_batch_size=24 \
-  --gradient_accumulation_steps=6 \
+  --gradient_accumulation_steps=1 \
   --learning_rate=2e-5 \
   --warmup_proportion=0.05 \
   --max_seq_length=512 \

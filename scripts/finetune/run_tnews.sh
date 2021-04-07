@@ -1,25 +1,18 @@
 #!/bin/bash
-
 set -e
 
 echo "Container nvidia build = " $NVIDIA_BUILD_ID
 
-# Model
-init_checkpoint=${init_checkpoint:-"results/checkpoints_raw_zh/ckpt_8601.pt"}
-config_file=${config_file:-"configs/bert_config_vocab30k.json"}
-vocab_file=${vocab_file:-"tokenizers/sp_raw_zh_30k.vocab"}
-vocab_model_file=${vocab_model_file:-"tokenizers/sp_raw_zh_30k.model"}
-tokenizer_type=${tokenizer_type:-"RawZh"}
-
-# init_checkpoint=${init_checkpoint:-"results/checkpoints_bert_zh_22675/ckpt_8601.pt"}
-# config_file=${config_file:-"configs/bert_config_vocab22675.json"}
-# vocab_file=${vocab_file:-"tokenizers/bert_chinese_uncased_22675.vocab"}
-# vocab_model_file=${vocab_model_file:-"tokenizers/bert_chinese_uncased_22675.model"}
-# tokenizer_type=${tokenizer_type:-"BertZh"}
+init_checkpoint=${init_checkpoint:-"results/checkpoints_bert_zh_22675/ckpt_8601.pt"}
+config_file=${config_file:-"configs/bert_config_vocab22675.json"}
+vocab_file=${vocab_file:-"tokenizers/bert_chinese_uncased_22675.vocab"}
+vocab_model_file=${vocab_model_file:-"tokenizers/bert_chinese_uncased_22675.model"}
+tokenizer_type=${tokenizer_type:-"BertZh"}
 
 # Dataset
 task_name=${task_name:-"csl"}
 data_dir=${data_dir:-"datasets/$task_name"}
+fewshot=${fewshot:-1}
 
 seed=${seed:-"2"}
 out_dir=${out_dir:-"logs/temp"}
@@ -34,7 +27,6 @@ batch_size=${batch_size:-"32"}
 gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
-max_seq_length=${max_seq_length:-128}
 # precision=${14:-"fp16"}
 
 mkdir -p $out_dir
@@ -82,7 +74,7 @@ CMD+="--bert_model bert-tiny "
 CMD+="--seed $seed "
 CMD+="--init_checkpoint $init_checkpoint "
 CMD+="--warmup_proportion $warmup_proportion "
-CMD+="--max_seq_length $max_seq_length "
+CMD+="--max_seq_length 256 "
 CMD+="--learning_rate $learning_rate "
 CMD+="--num_train_epochs $epochs "
 CMD+="--max_steps $max_steps "
