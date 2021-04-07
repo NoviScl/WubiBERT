@@ -55,14 +55,15 @@ output_dirs=(
 )
 
 seeds=(
-    "2"
-    # "23"
-    # "234"
+    # "2"
+    "23"
+    "234"
 )
 
 # Change these
 task_name="chid"
-script="./scripts/run_mrc_${task_name}.sh"
+script="./scripts/run_mrc_${task_name}.sh"  # MRC tasks
+# script="./scripts/run_finetune.sh"          # classification
 # epochs=8  # C3
 # epochs=6  # All 6 classification tasks
 # epochs=3  # cmrc
@@ -73,7 +74,7 @@ data_dir="datasets/${task_name}"
 
 for seed in ${seeds[@]}
 do
-    for i in {1..1}
+    for i in {0..2}
     do
         # Model
         init_checkpoint="results/${init_checkpoints[$i]}"

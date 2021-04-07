@@ -74,7 +74,7 @@ def evaluate(
     all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
 
     eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index)
-    eval_dataloader = DataLoader(eval_data, batch_size=args.n_batch, shuffle=False)
+    eval_dataloader = DataLoader(eval_data, batch_size=args.train_batch_size, shuffle=False)
 
     model.eval()
     all_results = []
@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
     # training parameter
     parser.add_argument('--train_epochs', type=int, default=2)
-    parser.add_argument('--n_batch', type=int, default=32)
+    parser.add_argument('--train_batch_size', type=int, default=32)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
     parser.add_argument('--lr', type=float, default=3e-5)
     parser.add_argument('--dropout', type=float, default=0.1)
@@ -183,23 +183,27 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
 
+    # Prepare files
+    output_dir = args.out_dir + '/' + str(args.seed)
+    filename_scores = os.path.join(output_dir, 'scores.txt')
+    logger.info("Arguments:")
+    logger.info(json.dumps(vars(args), indent=4))
+    filename_params = os.path.join(output_dir, 'params.json')
+    json.dump(vars(args), open(filename_params, 'w'), indent=4))  # Save arguments
+
+
     feature_file_suffix = 'features_' + str(args.max_seq_length) + '_' + args.tokenizer_type + '.json'
     example_file_suffix = 'examples_' + str(args.max_seq_length) + '_' + args.tokenizer_type + '.json'
     args.train_dir = args.train_dir.replace('features.json', feature_file_suffix)
     args.dev_dir1 = args.dev_dir1.replace('examples.json', example_file_suffix)
     args.dev_dir2 = args.dev_dir2.replace('features.json', feature_file_suffix)
 
-    output_dir = args.out_dir + '/' + str(args.seed)
-    filename_scores = os.path.join(output_dir, 'scores.txt')
+    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
     # # Clear log file content
     # with open(args.log_file, 'w') as f:
     #     f.write('')
 
-    logger.info("Arguments:")
-    logger.info(json.dumps(vars(args), indent=4))
-    filename_params = os.path.join(output_dir, 'params.json')
-    json.dump(vars(args), open(filename_params, 'w'), indent=4))
 
     # Manage files
     if (os.path.exists(output_dir) and os.listdir(output_dir) and
@@ -217,26 +221,20 @@ if __name__ == '__main__':
     logger.info("device %s n_gpu %d" % (device, n_gpu))
     logger.info("device: {} n_gpu: {} 16-bits training: {}".format(device, n_gpu, args.float16))
 
+    # Tokenizer
+    logger.info('Loading tokenizer...')
+    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    assert args.vocab_size == len(tokenizer.vocab)
+
+
+    # Prepare model
     config = modeling.BertConfig.from_json_file(args.config_file)
     # Padding for divisibility by 8
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
 
-    # # load the bert setting
-    # if 'albert' not in args.bert_config_file:
-    #     bert_config = BertConfig.from_json_file(args.bert_config_file)
-    # else:
-    #     if 'google' in args.bert_config_file:
-    #         bert_config = AlbertConfig.from_json_file(args.bert_config_file)
-    #     else:
-    #         bert_config = ALBertConfig.from_json_file(args.bert_config_file)
-
-    # load data
-    logger.info('loading data...')
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
-    # tokenizer = tokenization.BertTokenizer(vocab_file=args.vocab_file, do_lower_case=True)
-    # assert args.vocab_size == len(tokenizer.vocab)
-
+    # Load data
+    logger.info('Loading data and features...')
     # Generate new features every time, because tokenizer is changed.
     # if True:
     if not os.path.exists(args.train_dir):
@@ -252,19 +250,17 @@ if __name__ == '__main__':
     dev_examples = json.load(open(args.dev_dir1, 'r'))
     dev_features = json.load(open(args.dev_dir2, 'r'))
 
+    # TODO: remove
     # train_features = train_features[:10]
     # dev_examples = dev_examples[:10]
     # dev_features = dev_features[:10]
 
-    # if os.path.exists(args.log_file):
-        # os.remove(args.log_file)
-
-    steps_per_epoch = len(train_features) // args.n_batch
+    steps_per_epoch = len(train_features) // args.train_batch_size
     eval_steps = int(steps_per_epoch * args.eval_epochs)
-    dev_steps_per_epoch = len(dev_features) // args.n_batch
-    if len(train_features) % args.n_batch != 0:
+    dev_steps_per_epoch = len(dev_features) // args.train_batch_size
+    if len(train_features) % args.train_batch_size != 0:
         steps_per_epoch += 1
-    if len(dev_features) % args.n_batch != 0:
+    if len(dev_features) % args.train_batch_size != 0:
         dev_steps_per_epoch += 1
     total_steps = steps_per_epoch * args.train_epochs
 
@@ -278,10 +274,6 @@ if __name__ == '__main__':
     best_f1_em = 0
 
     best_f1, best_em = 0, 0
-    # with open(args.log_file, 'a') as aw:
-    #     aw.write('===================================' +
-    #                 'SEED:' + str(args.seed)
-    #                 + '===================================' + '\n')
     logger.info('SEED: ' + str(args.seed))
 
     random.seed(args.seed)
@@ -351,7 +343,7 @@ if __name__ == '__main__':
     if args.do_train:
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
                                    all_start_positions, all_end_positions)
-        train_dataloader = DataLoader(train_data, batch_size=args.n_batch, shuffle=True)
+        train_dataloader = DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True)
 
         # Save config
         model_to_save = model.module if hasattr(model, 'module') else model

@@ -10,17 +10,23 @@ vocab_file=${vocab_file:-"tokenizers/sp_raw_zh_30k.vocab"}
 vocab_model_file=${vocab_model_file:-"tokenizers/sp_raw_zh_30k.model"}
 tokenizer_type=${tokenizer_type:-"RawZh"}
 
+fewshot=${fewshot:-0}
+
 data_dir=${data_dir:-"datasets/$task_name"}
 out_dir=${out_dir:-"logs/$task_name"}
 
 seed=${seed:-2}
 epochs=${epochs:-2}
 
+if [[ $fewshot == '1' ]] ; then
+  fewshot = 
+fi
+
 python3 run_mrc.py \
   --train_epochs=${epochs} \
-  --n_batch=16 \
+  --train_batch_size=32 \
   --lr=3e-5 \
-  --gradient_accumulation_steps=4 \
+  --gradient_accumulation_steps=2 \
   --warmup_rate=0.1 \
   --max_seq_length=512 \
   --task_name=${task_name} \
@@ -37,7 +43,8 @@ python3 run_mrc.py \
   --dev_file=${data_dir}/dev.json \
   --checkpoint_dir=${out_dir} \
   --seed=${seed} \
-  --do_train
+  --do_train \
+  --fewshot=fewshot \
   # --gpu_ids="0,1" \
   # --init_restore_dir=$BERT_DIR/pytorch_model.pth \
 

@@ -312,6 +312,7 @@ def parse_args(parser=argparse.ArgumentParser()):
                         default=False,
                         action='store_true',
                         help="Whether to save checkpoints")
+    parser.add_argument('--fewshot', type=int, default=0)
     return parser.parse_args()
 
 
@@ -498,6 +499,15 @@ def main(args):
     print("main() in run_glue.py")
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
+
+    if fewshot == 0:
+        output_dir = os.path.join(args.output_dir, str(args.seed))
+    else:
+        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
+    filename_params = os.path.join(output_dir, 'params.json')
+    json.dump(vars(args), open(filename_params, 'w'), indent=4)
+
+
     output_dir = args.output_dir + "/" + str(args.seed)
     args.fp16 = args.fp16 or args.amp
     if args.server_ip and args.server_port:
@@ -593,8 +603,7 @@ def main(args):
 
     num_train_optimization_steps = None
     if args.do_train:
-        print('start training')
-        exit(0)
+        logger.info('Getting traning features...')
         train_features = get_train_features(
             args.data_dir,
             args.bert_model,
@@ -637,10 +646,12 @@ def main(args):
             config,
             num_labels=num_labels,
         )
+        print(config)
         model.load_state_dict(
             torch.load(args.init_checkpoint, map_location='cpu')["model"],
             strict=False,
         )
+
     logger.info("USED CHECKPOINT from {}".format(args.init_checkpoint))
     dllogger.log(
         step="PARAMETER",

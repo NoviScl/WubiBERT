@@ -165,6 +165,8 @@ def main():
     filename_scores = os.path.join(args.output_dir, 'scores.txt')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
+    with open(filename_scores, 'w') as f:
+        f.write('epoch\ttrain_loss\tdev_acc\n')  # Column names
 
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
@@ -200,11 +202,11 @@ def main():
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     
     # Load train data
-    logger.info('Generating train features...')
     suffix = '_{}_{}.pkl'.format(str(args.max_seq_length), args.tokenizer_type)
     train_example_file = os.path.join(args.data_dir, 'train_examples' + suffix)
     train_feature_file = os.path.join(args.data_dir, 'train_features' + suffix)
 
+    logger.info('Generating train features..., feature_file = {}'.format(train_feature_file))
     train_features = generate_input(
         args.train_file, 
         args.train_ans_file, 
@@ -216,9 +218,9 @@ def main():
         is_training=True)
 
     # Load dev data
-    logger.info("Generating dev features...")
     dev_example_file = os.path.join(args.data_dir, 'dev_examples' + suffix)
     dev_feature_file = os.path.join(args.data_dir, 'dev_features' + suffix)
+    logger.info("Generating dev features..., feature_file = {}".format(dev_feature_file))
 
     eval_features = generate_input(
         args.predict_file, 
@@ -229,6 +231,11 @@ def main():
         max_seq_length=args.max_seq_length, 
         max_num_choices=args.max_num_choices,
         is_training=False)
+
+    # # TODO: remove
+    # train_features = train_feature[:100]
+    # eval_features = eval_features[:100]
+
 
     logger.info("Train features {}".format(len(train_features)))
     num_train_steps = int(
@@ -269,13 +276,15 @@ def main():
     logger.info('Preparing model from checkpoint {}'.format(args.init_checkpoint))
     config = modeling.BertConfig.from_json_file(args.config_file)
     model = modeling.BertForMultipleChoice(config, args.max_num_choices)
-    model.load_state_dict(
-        torch.load(args.init_checkpoint, map_location='cpu')["model"],
-        strict=False,
-    )
-    model = model.to(device)
-    if n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+
+    state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
+    model.load_state_dict(state_dict, strict=False)
+    model.to(device)
+    # if n_gpu > 1:
+    #     model = torch.nn.DataParallel(model)
 
     # optimizer = get_optimization(model,
     #                              float16=args.fp16,
@@ -317,7 +326,7 @@ def main():
     logger.info('Batch size: ' + str(args.train_batch_size))
     for ep in range(int(args.num_train_epochs)):
         num_step = 0
-        average_loss = 0
+        total_train_loss = 0
         model.train()
         model.zero_grad()  # 等价于optimizer.zero_grad()
         steps_per_epoch = num_train_steps // args.num_train_epochs
@@ -355,10 +364,10 @@ def main():
 
 
                 train_loss_history.append(loss.item())
-                average_loss += loss.item()
+                total_train_loss += loss.item()
                 num_step += 1
 
-                pbar.set_postfix({'loss': '{0:1.5f}'.format(average_loss / (num_step + 1e-5))})
+                pbar.set_postfix({'loss': '{0:1.5f}'.format(total_train_loss / (num_step + 1e-5))})
                 pbar.update(1)
 
         logger.info("***** Running predictions *****")
@@ -405,7 +414,14 @@ def main():
             logger.info(f'{args.predict_file} 预测精度：{acc}')
             dev_acc_history.append(acc)
         
-         # Save model
+
+        train_loss = total_train_loss / (num_step + 1e-5)
+        with open(filename_scores, 'a') as f:
+            vals = list(map(str, [ep, train_loss, acc]))
+            f.write('\t'.join(vals))
+            f.write('\n')
+
+        # Save model
         model_to_save = model.module if hasattr(model, 'module') else model
         model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
         torch.save(

@@ -22,14 +22,18 @@ echo "Container nvidia build = " $NVIDIA_BUILD_ID
 # init_checkpoint=${1:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
 # init_checkpoint=${1:-"/data04/scl/bert-base-chinese"}
 # init_checkpoint=${init_checkpoint:-"logs/tnews_concat_sep/pytorch_model.bin_2"}
-init_checkpoint=${init_checkpoint:-"results/checkpoints_raw_zh/ckpt_8601.pt"}
-# config_file=${4:-"/data04/scl/bert-base-chinese/config.json"}
+
+# init_checkpoint=${init_checkpoint:-"results/checkpoints_raw_zh/ckpt_8601.pt"}
 # config_file=${config_file:-"configs/bert_config_vocab30k.json"}
-config_file=${config_file:-"configs/bert_config_vocab30k.json"}
-# vocab_file=${3:-"/data04/scl/bert-base-chinese/vocab.txt"}
-vocab_file=${vocab_file:-"tokenizers/sp_raw_zh_30k.vocab"}
-vocab_model_file=${vocab_model_file:-"tokenizers/sp_raw_zh_30k.model"}
-tokenizer_type=${tokenizer_type:-"RawZh"}
+# vocab_file=${vocab_file:-"tokenizers/sp_raw_zh_30k.vocab"}
+# vocab_model_file=${vocab_model_file:-"tokenizers/sp_raw_zh_30k.model"}
+# tokenizer_type=${tokenizer_type:-"RawZh"}
+
+init_checkpoint=${init_checkpoint:-"results/checkpoints_bert_zh_22675/ckpt_8601.pt"}
+config_file=${config_file:-"configs/bert_config_vocab22675.json"}
+vocab_file=${vocab_file:-"tokenizers/bert_chinese_uncased_22675.vocab"}
+vocab_model_file=${vocab_model_file:-"tokenizers/bert_chinese_uncased_22675.model"}
+tokenizer_type=${tokenizer_type:-"BertZh"}
 
 # Dataset
 task_name=${task_name:-"csl"}

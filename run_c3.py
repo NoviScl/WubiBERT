@@ -47,7 +47,7 @@ from mrc.tools import utils
 # from tools.pytorch_optimization import get_optimization, warmup_linear
 
 # Contants for C3
-n_class = 4  # 数据集里不一定有四个选项，但是会手动加 “无效答案” 至 4 个。
+num_choices = 4  # 数据集里不一定有四个选项，但是会手动加 “无效答案” 至 4 个。
 reverse_order = False
 sa_step = False
 
@@ -269,7 +269,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                 input_mask=input_mask,
                 segment_ids=segment_ids,
                 label_id=label_id))
-        if len(features[-1]) == n_class:
+        if len(features[-1]) == num_choices:
             features.append([])
 
     if len(features[-1]) == 0:
@@ -323,35 +323,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    # parser.add_argument("--gpu_ids",
-    #                     default='0',
-    #                     type=str,
-    #                     required=True)
-    # parser.add_argument("--data_dir",
-    #                     default=None,
-    #                     type=str,
-    #                     required=True,
-    #                     help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    # parser.add_argument("--task_name",
-    #                     default='c3',
-    #                     type=str,
-    #                     required=True)
-    # parser.add_argument("--bert_config_file",
-    #                     default=None,
-    #                     type=str,
-    #                     required=True,
-    #                     help="The config json file corresponding to the pre-trained BERT model. \n"
-    #                          "This specifies the model architecture.")
-    # parser.add_argument("--vocab_file",
-    #                     default=None,
-    #                     type=str,
-    #                     required=True,
-    #                     help="The vocabulary file that the BERT model was trained on.")
-    # parser.add_argument("--output_dir",
-    #                     default=None,
-    #                     type=str,
-    #                     required=True,
-    #                     help="The output directory where the model checkpoints will be written.")
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--tokenizer_type', type=str, required=True)
@@ -361,10 +332,6 @@ def parse_args():
     parser.add_argument('--init_checkpoint', type=str, required=True)
 
     ## Other parameters
-    # parser.add_argument("--init_checkpoint",
-    #                     default='check_points/pretrain_models/albert_xxlarge_google_zh_v1121/pytorch_model.pth',
-    #                     type=str,
-    #                     help="Initial checkpoint (usually from a pre-trained BERT model).")
     parser.add_argument("--do_lower_case",
                         default=True,
                         action='store_true',
@@ -426,10 +393,6 @@ def parse_args():
                         type=int,
                         default=-1,
                         help="local_rank for distributed training on gpus")
-    # parser.add_argument('--seed',
-    #                     type=int,
-    #                     default=422,
-    #                     help="random seed for initialization")
     parser.add_argument('--seed', type=int, required=True)
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
@@ -452,21 +415,6 @@ def main():
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
     with open(filename_scores, 'w') as f:
         f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
-    # args.setting_file = os.path.join(args.output_dir, args.setting_file)
-    # args.log_file = os.path.join(args.output_dir, args.log_file)
-    # with open(args.setting_file, 'wt') as opt_file:
-    #     opt_file.write('------------ Options -------------\n')
-    #     print('------------ Options -------------')
-    #     for k in args.__dict__:
-    #         v = args.__dict__[k]
-    #         opt_file.write('%s: %s\n' % (str(k), str(v)))
-    #         print('%s: %s' % (str(k), str(v)))
-    #     opt_file.write('-------------- End ----------------\n')
-    #     print('------------ End -------------')
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
-
-    # if os.path.exists(args.log_file):
-    #     os.remove(args.log_file)
 
     # Setup cuda
     if args.local_rank == -1 or args.no_cuda:
@@ -509,27 +457,37 @@ def main():
     num_train_steps = None
     if args.do_train:
         train_examples = processor.get_train_examples()
-        num_train_steps = int(len(train_examples) / n_class / args.train_batch_size /
+        num_train_steps = int(len(train_examples) / num_choices / args.train_batch_size /
                               args.gradient_accumulation_steps * args.num_train_epochs)
 
     # Model
-    logger.info(f'Loading model...')
+    device = 'cpu'
+    logger.info('Preparing model from checkpoint "{}"...'.format(args.init_checkpoint))
     config = modeling.BertConfig.from_json_file(args.config_file)
-    model = modeling.BertForMultipleChoice(config, num_choices=n_class)
-    model.load_state_dict(
-        torch.load(args.init_checkpoint, map_location='cpu')['model'],
-        strict=False,
-    )
+    # Padding for divisibility by 8
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+
+    model = modeling.BertForMultipleChoice(config, num_choices)
+    state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
+    # print(state_dict['bert.embeddings.word_embeddings.weight'].shape)
+    # print(model.state_dict()['bert.embeddings.word_embeddings.weight'].shape)
+    model.load_state_dict(state_dict, strict=False,)
+    # print(model.config)
+    # print("DONE")
+    # exit(0)
     # if 'albert' in args.bert_config_file:
     #     if 'google' in args.bert_config_file:
     #         bert_config = AlbertConfig.from_json_file(args.bert_config_file)
-    #         model = AlbertForMultipleChoice(bert_config, num_choices=n_class)
+    #         model = AlbertForMultipleChoice(bert_config, num_choices=num_choices)
     #     else:
     #         bert_config = ALBertConfig.from_json_file(args.bert_config_file)
-    #         model = ALBertForMultipleChoice(bert_config, num_choices=n_class)
+    #         model = ALBertForMultipleChoice(bert_config, num_choices=num_choices)
     # else:
     #     bert_config = BertConfig.from_json_file(args.bert_config_file)
-    #     model = BertForMultipleChoice(bert_config, num_choices=n_class)
+    #     model = BertForMultipleChoice(bert_config, num_choices=num_choices)
 
     if args.max_seq_length > config.max_position_embeddings:
         raise ValueError(
@@ -541,6 +499,7 @@ def main():
     #     utils.torch_init_model(model, args.init_checkpoint)
     if args.float16:
         model.half()
+    
     model.to(device)
 
     if args.local_rank != -1:
@@ -584,6 +543,8 @@ def main():
             with open(feature_dir, 'wb') as w:
                 pickle.dump(eval_features, w)
 
+        eval_features = eval_features[:10]
+
         input_ids = []
         input_mask = []
         segment_ids = []
@@ -593,7 +554,7 @@ def main():
             input_ids.append([])
             input_mask.append([])
             segment_ids.append([])
-            for i in range(n_class):
+            for i in range(num_choices):
                 input_ids[-1].append(f[i].input_ids)
                 input_mask[-1].append(f[i].input_mask)
                 segment_ids[-1].append(f[i].segment_ids)
@@ -622,9 +583,12 @@ def main():
             with open(feature_dir, 'wb') as w:
                 pickle.dump(train_features, w)
 
+        # train_features = train_features[:10]
+
         logger.info("***** Running training *****")
         logger.info('  Num epochs = %d', args.num_train_epochs)
         logger.info("  Num examples = %d", len(train_examples))
+        logger.info('  Num features = %d', len(train_features))
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_steps)
 
@@ -636,7 +600,7 @@ def main():
             input_ids.append([])
             input_mask.append([])
             segment_ids.append([])
-            for i in range(n_class):
+            for i in range(num_choices):
                 input_ids[-1].append(f[i].input_ids)
                 input_mask[-1].append(f[i].input_mask)
                 segment_ids[-1].append(f[i].segment_ids)
@@ -668,7 +632,14 @@ def main():
                 for step, batch in enumerate(train_dataloader):
                     batch = tuple(t.to(device) for t in batch)
                     input_ids, input_mask, segment_ids, label_ids = batch
+                    # try:
                     loss = model(input_ids, segment_ids, input_mask, label_ids)
+                    # except:
+                    #     print(input_ids[0], 0)
+                    #     for ii in input_ids:
+                    #         print(torch.max(ii))
+                    #     print(label_ids)
+                    #     exit(0)
                     if n_gpu > 1:
                         loss = loss.mean()  # mean() to average on multi-gpu.
                     if args.gradient_accumulation_steps > 1:
@@ -850,7 +821,7 @@ def main():
             input_ids.append([])
             input_mask.append([])
             segment_ids.append([])
-            for i in range(n_class):
+            for i in range(num_choices):
                 input_ids[-1].append(f[i].input_ids)
                 input_mask[-1].append(f[i].input_mask)
                 segment_ids[-1].append(f[i].segment_ids)
