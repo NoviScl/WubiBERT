@@ -112,7 +112,8 @@ class pretraining_dataset(Dataset):
         masked_lm_labels = torch.ones(input_ids.shape, dtype=torch.long) * -1
         index = self.max_pred_length
         # store number of  masked tokens in index
-        padded_mask_indices = (masked_lm_positions == 0).nonzero()
+        # padded_mask_indices = (masked_lm_positions == 0).nonzero()
+        padded_mask_indices = torch.nonzero(masked_lm_positions == 0, as_tuple=False)
         if len(padded_mask_indices) != 0:
             index = padded_mask_indices[0].item()
         masked_lm_labels[masked_lm_positions[:index]] = masked_lm_ids[:index]
@@ -278,6 +279,10 @@ def parse_arguments():
                         default=False,
                         action='store_true',
                         help="Whether to run training.")
+    parser.add_argument("--do_eval",
+                        default=False,
+                        action='store_true',
+                        help="Whether to do eval on dev set.")
     parser.add_argument('--json-summary', type=str, default="results/dllogger.json",
                         help='If provided, the json summary will be written to'
                              'the specified file.')
@@ -503,6 +508,90 @@ def take_optimizer_step(args, optimizer, model, overflow_buf, global_step):
 
     return global_step
 
+def evaluate(model, args, worker_init, device, criterion):
+    if is_main_process():
+        dllogger.log(step="PARAMETER", data={"eval_start": True})
+        dllogger.log(step="PARAMETER", data={"batch_size_per_gpu": args.train_batch_size * 2})
+
+    model.eval()
+    most_recent_ckpts_paths = []
+    average_loss = 0.0  # averaged loss every args.log_freq steps
+
+    pool = ProcessPoolExecutor(1)
+
+    thread = None
+    restored_data_loader = None
+    files = [os.path.join(args.input_dir, f) for f in os.listdir(args.input_dir) if
+                os.path.isfile(os.path.join(args.input_dir, f)) and 'test' in f]
+    files.sort()
+    num_files = len(files)
+    random.Random(args.seed).shuffle(files)
+    f_start_id = 0
+
+    shared_file_list = {}
+
+    if torch.distributed.is_initialized() and get_world_size() > num_files:
+        remainder = get_world_size() % num_files
+        data_file = files[(f_start_id*get_world_size()+get_rank() + remainder*f_start_id)%num_files]
+    else:
+        data_file = files[(f_start_id*get_world_size()+get_rank())%num_files]
+
+    previous_file = data_file
+
+    if restored_data_loader is None:
+        train_data = pretraining_dataset(data_file, args.max_predictions_per_seq)
+        train_sampler = RandomSampler(train_data)
+        train_dataloader = DataLoader(train_data, sampler=train_sampler,
+                                        batch_size=args.train_batch_size * 2 * args.n_gpu,
+                                        num_workers=4, worker_init_fn=worker_init,
+                                        pin_memory=True)
+    else:
+        train_dataloader = restored_data_loader
+        restored_data_loader = None
+
+    overflow_buf = None
+    divisor = 0
+    if args.allreduce_post_accumulation:
+        overflow_buf = torch.cuda.IntTensor([0])
+
+    # print ("world_size: ", get_world_size())
+
+    for f_id in range(f_start_id, len(files) // get_world_size()):
+        # print ("F_ID: ", f_id)
+
+        if get_world_size() > num_files:
+            data_file = files[(f_id*get_world_size()+get_rank() + remainder*f_id)%num_files]
+        else:
+            # print ("rank: ", get_rank())
+            # print ((f_id*get_world_size()+get_rank())%num_files)
+            data_file = files[(f_id*get_world_size()+get_rank())%num_files]
+
+        previous_file = data_file
+
+        dataset_future = pool.submit(create_pretraining_dataset, data_file, args.max_predictions_per_seq, shared_file_list, args, worker_init)
+
+        train_iter = train_dataloader
+
+        for step, batch in enumerate(train_iter):
+            batch = [t.to(device) for t in batch]
+            input_ids, segment_ids, input_mask, masked_lm_labels, next_sentence_labels = batch
+            # prediction_scores, seq_relationship_score = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+            prediction_scores = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+            loss = criterion(prediction_scores, masked_lm_labels)
+            if args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu.
+            average_loss += loss.item()
+            divisor += 1
+
+    if is_main_process():
+        dllogger.log(step="VALIDATION_LOSS", data={"eval_loss": average_loss / divisor})
+        print ("validation loss: ", average_loss / divisor)
+
+    del train_dataloader
+    return average_loss
+        
+
+
 def main():
     global timeout_sent
 
@@ -584,8 +673,8 @@ def main():
             if args.allreduce_post_accumulation:
                 overflow_buf = torch.cuda.IntTensor([0])
 
-            for f_id in range(f_start_id + 1 , len(files)):
-                
+            for f_id in range(f_start_id, len(files)):
+                # print ("epoch: {}, f_id: {}".format(epoch, f_id))
    
                 if get_world_size() > num_files:
                     data_file = files[(f_id*get_world_size()+get_rank() + remainder*f_id)%num_files]
@@ -596,7 +685,7 @@ def main():
 
                 dataset_future = pool.submit(create_pretraining_dataset, data_file, args.max_predictions_per_seq, shared_file_list, args, worker_init)
 
-                train_iter = tqdm(train_dataloader, desc="Iteration", disable=args.disable_progress_bar) if is_main_process() else train_dataloader
+                train_iter = train_dataloader
 
                 if raw_train_start is None:
                     raw_train_start = time.time()
@@ -651,6 +740,11 @@ def main():
                     if global_step >= args.steps_this_run or training_steps % (
                             args.num_steps_per_checkpoint * args.gradient_accumulation_steps) == 0 or timeout_sent:
                         if is_main_process() and not args.skip_checkpoint:
+                            # eval on dev set
+                            if args.do_eval:
+                                evaluate(model, args, worker_init, device, criterion)
+                            model.train()
+
                             # Save a trained model
                             dllogger.log(step="PARAMETER", data={"checkpoint_step": global_step})
                             model_to_save = model.module if hasattr(model,

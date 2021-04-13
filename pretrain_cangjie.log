@@ -1,0 +1,371 @@
+/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5
+Logs written to /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210413135236.log
++ '[' -z /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210413135236.log ']'
++ tee /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210413135236.log
++ python3 -m torch.distributed.launch --master_port=1234 --nproc_per_node=8 ./run_pretraining.py --input_dir=/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5 --output_dir=/mnt/datadisk0/scl/results/checkpoints_cangjie_22675 --config_file=configs/bert_config_vocab22675.json --bert_model=bert-tiny-uncased --train_batch_size=8192 --max_seq_length=128 --max_predictions_per_seq=20 --max_steps=7038 --warmup_proportion=0.2843 --num_steps_per_checkpoint=800 --learning_rate=10e-3 --seed=12439 --fp16 --gradient_accumulation_steps=16 --allreduce_post_accumulation --allreduce_post_accumulation_fp16 --do_train --do_eval --json-summary /mnt/datadisk0/scl/results/dllogger.json
+device: cuda:3 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:1 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:5 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:2 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:7 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:6 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:4 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:0 n_gpu: 1, distributed training: True, 16-bits training: True
+DLL 2021-04-13 13:52:38.776907 - PARAMETER Config : ["Namespace(allreduce_post_accumulation=True, allreduce_post_accumulation_fp16=True, amp=False, bert_model='bert-tiny-uncased', checkpoint_activations=False, config_file='configs/bert_config_vocab22675.json', disable_progress_bar=False, do_eval=True, do_train=True, fp16=True, gradient_accumulation_steps=16, init_checkpoint=None, init_loss_scale=1048576, input_dir='/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5', json_summary='/mnt/datadisk0/scl/results/dllogger.json', learning_rate=0.01, local_rank=0, log_freq=1.0, loss_scale=0.0, max_predictions_per_seq=20, max_seq_length=128, max_steps=7038.0, n_gpu=1, num_steps_per_checkpoint=800, num_train_epochs=3.0, output_dir='/mnt/datadisk0/scl/results/checkpoints_cangjie_22675', phase1_end_step=7038, phase2=False, resume_from_checkpoint=False, resume_step=-1, seed=12439, skip_checkpoint=False, steps_this_run=7038.0, train_batch_size=512, use_env=False, warmup_proportion=0.2843)"] 
+Selected optimization level O2:  FP16 training with FP32 batchnorm and FP32 master weights.
+
+Defaults for this optimization level are:
+enabled                : True
+opt_level              : O2
+cast_model_type        : torch.float16
+patch_torch_functions  : False
+keep_batchnorm_fp32    : True
+master_weights         : True
+loss_scale             : dynamic
+Processing user overrides (additional kwargs that are not None)...
+After processing overrides, optimization options are:
+enabled                : True
+opt_level              : O2
+cast_model_type        : torch.float16
+patch_torch_functions  : False
+keep_batchnorm_fp32    : True
+master_weights         : True
+loss_scale             : dynamic
+DLL 2021-04-13 13:52:47.813268 - PARAMETER SEED : 12439 
+DLL 2021-04-13 13:52:47.813728 - PARAMETER train_start : True 
+DLL 2021-04-13 13:52:47.813787 - PARAMETER batch_size_per_gpu : 512 
+DLL 2021-04-13 13:52:47.813824 - PARAMETER learning_rate : 0.01 
+DLL 2021-04-13 13:52:57.220702 - PARAMETER loss_scale : 524288.0 
+DLL 2021-04-13 13:52:57.222197 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.1875  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-13 13:53:05.113780 - PARAMETER loss_scale : 262144.0 
+DLL 2021-04-13 13:53:05.115016 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.185546875  step_loss : 10.1796875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-13 13:53:12.996712 - PARAMETER loss_scale : 131072.0 
+DLL 2021-04-13 13:53:12.998338 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.18896484375  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-13 13:53:20.874710 - PARAMETER loss_scale : 65536.0 
+DLL 2021-04-13 13:53:20.875845 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.18896484375  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-13 13:53:28.779000 - PARAMETER loss_scale : 32768.0 
+DLL 2021-04-13 13:53:28.780313 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.18701171875  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-13 13:53:36.826898 - Training Epoch: 0 Training Iteration: 1  average_loss : 10.189453125  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-13 13:53:44.899061 - Training Epoch: 0 Training Iteration: 2  average_loss : 10.1875  step_loss : 10.1875  learning_rate : 9.9954850394077e-06 
+DLL 2021-04-13 13:53:52.975617 - Training Epoch: 0 Training Iteration: 3  average_loss : 10.18505859375  step_loss : 10.203125  learning_rate : 1.499322755911155e-05 
+DLL 2021-04-13 13:54:01.035214 - Training Epoch: 0 Training Iteration: 4  average_loss : 10.189453125  step_loss : 10.1953125  learning_rate : 1.99909700788154e-05 
+DLL 2021-04-13 13:54:09.096843 - Training Epoch: 0 Training Iteration: 5  average_loss : 10.18212890625  step_loss : 10.1953125  learning_rate : 2.498871259851925e-05 
+DLL 2021-04-13 13:54:17.179753 - Training Epoch: 0 Training Iteration: 6  average_loss : 10.18359375  step_loss : 10.171875  learning_rate : 2.99864551182231e-05 
+DLL 2021-04-13 13:54:25.255760 - Training Epoch: 0 Training Iteration: 7  average_loss : 10.18212890625  step_loss : 10.1875  learning_rate : 3.498419763792695e-05 
+DLL 2021-04-13 13:54:33.327616 - Training Epoch: 0 Training Iteration: 8  average_loss : 10.18017578125  step_loss : 10.1796875  learning_rate : 3.99819401576308e-05 
+DLL 2021-04-13 13:54:41.421380 - Training Epoch: 0 Training Iteration: 9  average_loss : 10.1728515625  step_loss : 10.1796875  learning_rate : 4.497968267733465e-05 
+DLL 2021-04-13 13:54:49.494611 - Training Epoch: 0 Training Iteration: 10  average_loss : 10.16796875  step_loss : 10.171875  learning_rate : 4.99774251970385e-05 
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 2; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.26 GiB free; 28.25 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7f43b3cb81e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7f43b3f0e64b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7f43b3f0f464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7f43b3f0faa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7f43b6c1a90e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7f43b5054949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7f43b506e777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7f43efe0ac7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7f43efe0af97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7f43eff15a1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7f43efb93c3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7f43effa90c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7f43effe4863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7f43efef8b31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7f43b64a4a97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7f43b648efaa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7f43b50425c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7f43efe351d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7f43efec3649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7f43f1be739f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7f43efe351d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7f43efec3649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7f43f1a63057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7f43f2096bb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7f43f2092400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7f43f2092fa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7f43f208b119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7f43ff82686a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7f440075ccb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7f440afa0609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7f440aec7103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 7; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.45 GiB free; 28.06 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7fd9f9f631e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7fd9fa1b964b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7fd9fa1ba464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7fd9fa1baaa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7fd9fcec590e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7fd9fb2ff949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7fd9fb319777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7fda360b5c7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7fda360b5f97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7fda361c0a1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7fda35e3ec3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7fda362540c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7fda3628f863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7fda361a3b31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7fd9fc74fa97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7fd9fc739faa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7fd9fb2ed5c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7fda360e01d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fda3616e649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7fda37e9239f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7fda360e01d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fda3616e649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7fda37d0e057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7fda38341bb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7fda3833d400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7fda3833dfa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7fda38336119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7fda45ad186a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7fda46a07cb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7fda5124b609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7fda51172103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 0; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.35 GiB free; 28.15 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7fc78df611e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7fc78e1b764b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7fc78e1b8464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7fc78e1b8aa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7fc790ec390e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7fc78f2fd949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7fc78f317777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7fc7ca0b3c7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7fc7ca0b3f97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7fc7ca1bea1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7fc7c9e3cc3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7fc7ca2520c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7fc7ca28d863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7fc7ca1a1b31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7fc79074da97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7fc790737faa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7fc78f2eb5c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7fc7ca0de1d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fc7ca16c649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7fc7cbe9039f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7fc7ca0de1d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fc7ca16c649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7fc7cbd0c057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7fc7cc33fbb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7fc7cc33b400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7fc7cc33bfa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7fc7cc334119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7fc7d9acf86a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7fc7daa05cb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7fc7e5249609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7fc7e5170103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 5; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.35 GiB free; 28.15 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7faee12d01e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7faee152664b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7faee1527464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7faee1527aa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7faee423290e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7faee266c949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7faee2686777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7faf1d422c7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7faf1d422f97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7faf1d52da1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7faf1d1abc3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7faf1d5c10c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7faf1d5fc863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7faf1d510b31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7faee3abca97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7faee3aa6faa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7faee265a5c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7faf1d44d1d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7faf1d4db649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7faf1f1ff39f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7faf1d44d1d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7faf1d4db649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7faf1f07b057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7faf1f6aebb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7faf1f6aa400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7faf1f6aafa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7faf1f6a3119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7faf2ce3e86a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7faf2dd74cb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7faf385b8609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7faf384df103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 1; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.45 GiB free; 28.06 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7f8d6a0c81e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7f8d6a31e64b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7f8d6a31f464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7f8d6a31faa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7f8d6d02a90e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7f8d6b464949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7f8d6b47e777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7f8da621ac7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7f8da621af97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7f8da6325a1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7f8da5fa3c3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7f8da63b90c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7f8da63f4863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7f8da6308b31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7f8d6c8b4a97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7f8d6c89efaa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7f8d6b4525c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7f8da62451d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7f8da62d3649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7f8da7ff739f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7f8da62451d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7f8da62d3649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7f8da7e73057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7f8da84a6bb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7f8da84a2400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7f8da84a2fa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7f8da849b119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7f8db5c3686a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7f8db6b6ccb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7f8dc13b0609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7f8dc12d7103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 3; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.35 GiB free; 28.15 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7fc6e39fd1e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7fc6e3c5364b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7fc6e3c54464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7fc6e3c54aa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7fc6e695f90e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7fc6e4d99949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7fc6e4db3777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7fc71fb4fc7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7fc71fb4ff97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7fc71fc5aa1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7fc71f8d8c3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7fc71fcee0c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7fc71fd29863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7fc71fc3db31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7fc6e61e9a97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7fc6e61d3faa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7fc6e4d875c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7fc71fb7a1d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fc71fc08649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7fc72192c39f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7fc71fb7a1d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fc71fc08649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7fc7217a8057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7fc721ddbbb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7fc721dd7400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7fc721dd7fa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7fc721dd0119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7fc72f56b86a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7fc7304a1cb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7fc73ace5609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7fc73ac0c103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "./run_pretraining.py", line 788, in <module>
+    args, final_loss, train_time_raw, global_step = main()
+  File "./run_pretraining.py", line 711, in main
+    scaled_loss.backward()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/tensor.py", line 185, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/autograd/__init__.py", line 125, in backward
+    Variable._execution_engine.run_backward(
+RuntimeError: CUDA out of memory. Tried to allocate 2.77 GiB (GPU 4; 31.75 GiB total capacity; 23.37 GiB already allocated; 2.45 GiB free; 28.06 GiB reserved in total by PyTorch)
+Exception raised from malloc at /pytorch/c10/cuda/CUDACachingAllocator.cpp:272 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x42 (0x7fd8d4b091e2 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1e64b (0x7fd8d4d5f64b in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x1f464 (0x7fd8d4d60464 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #3: <unknown function> + 0x1faa1 (0x7fd8d4d60aa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libc10_cuda.so)
+frame #4: at::native::empty_cuda(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x11e (0x7fd8d7a6b90e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0xf33949 (0x7fd8d5ea5949 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xf4d777 (0x7fd8d5ebf777 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0x10e9c7d (0x7fd910c5bc7d in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #8: <unknown function> + 0x10e9f97 (0x7fd910c5bf97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: at::empty(c10::ArrayRef<long>, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0xfa (0x7fd910d66a1a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: at::native::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x49e (0x7fd9109e4c3e in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: <unknown function> + 0x12880c1 (0x7fd910dfa0c1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x12c3863 (0x7fd910e35863 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: at::empty_like(at::Tensor const&, c10::TensorOptions const&, c10::optional<c10::MemoryFormat>) + 0x101 (0x7fd910d49b31 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: at::Tensor at::native::(anonymous namespace)::host_softmax_backward<at::native::(anonymous namespace)::LogSoftMaxBackwardEpilogue, true>(at::Tensor const&, at::Tensor const&, long, bool) + 0xa7 (0x7fd8d72f5a97 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #15: at::native::log_softmax_backward_cuda(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x65a (0x7fd8d72dffaa in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #16: <unknown function> + 0xf215c0 (0x7fd8d5e935c0 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cuda.so)
+frame #17: <unknown function> + 0x11141d6 (0x7fd910c861d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #18: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fd910d14649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #19: <unknown function> + 0x2ec639f (0x7fd912a3839f in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #20: <unknown function> + 0x11141d6 (0x7fd910c861d6 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #21: at::_log_softmax_backward_data(at::Tensor const&, at::Tensor const&, long, at::Tensor const&) + 0x119 (0x7fd910d14649 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #22: torch::autograd::generated::LogSoftmaxBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x1d7 (0x7fd9128b4057 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #23: <unknown function> + 0x3375bb7 (0x7fd912ee7bb7 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #24: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&, std::shared_ptr<torch::autograd::ReadyQueue> const&) + 0x1400 (0x7fd912ee3400 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #25: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&) + 0x451 (0x7fd912ee3fa1 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #26: torch::autograd::Engine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x89 (0x7fd912edc119 in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_cpu.so)
+frame #27: torch::autograd::python::PythonEngine::thread_init(int, std::shared_ptr<torch::autograd::ReadyQueue> const&, bool) + 0x4a (0x7fd92067786a in /mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/lib/libtorch_python.so)
+frame #28: <unknown function> + 0xd6cb4 (0x7fd9215adcb4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #29: <unknown function> + 0x9609 (0x7fd92bdf1609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #30: clone + 0x43 (0x7fd92bd18103 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Traceback (most recent call last):
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/distributed/launch.py", line 261, in <module>
+    main()
+  File "/mnt/datadisk0/miniconda3/lib/python3.8/site-packages/torch/distributed/launch.py", line 256, in main
+    raise subprocess.CalledProcessError(returncode=process.returncode,
+subprocess.CalledProcessError: Command '['/mnt/datadisk0/miniconda3/bin/python3', '-u', './run_pretraining.py', '--local_rank=7', '--input_dir=/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5', '--output_dir=/mnt/datadisk0/scl/results/checkpoints_cangjie_22675', '--config_file=configs/bert_config_vocab22675.json', '--bert_model=bert-tiny-uncased', '--train_batch_size=8192', '--max_seq_length=128', '--max_predictions_per_seq=20', '--max_steps=7038', '--warmup_proportion=0.2843', '--num_steps_per_checkpoint=800', '--learning_rate=10e-3', '--seed=12439', '--fp16', '--gradient_accumulation_steps=16', '--allreduce_post_accumulation', '--allreduce_post_accumulation_fp16', '--do_train', '--do_eval', '--json-summary', '/mnt/datadisk0/scl/results/dllogger.json']' returned non-zero exit status 1.
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
