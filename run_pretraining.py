@@ -511,7 +511,7 @@ def take_optimizer_step(args, optimizer, model, overflow_buf, global_step):
 def evaluate(model, args, worker_init, device, criterion):
     if is_main_process():
         dllogger.log(step="PARAMETER", data={"eval_start": True})
-        dllogger.log(step="PARAMETER", data={"batch_size_per_gpu": args.train_batch_size * 2})
+        dllogger.log(step="PARAMETER", data={"batch_size_per_gpu": args.train_batch_size})
 
     model.eval()
     most_recent_ckpts_paths = []
@@ -525,7 +525,6 @@ def evaluate(model, args, worker_init, device, criterion):
                 os.path.isfile(os.path.join(args.input_dir, f)) and 'test' in f]
     files.sort()
     num_files = len(files)
-    random.Random(args.seed).shuffle(files)
     f_start_id = 0
 
     shared_file_list = {}
@@ -542,7 +541,7 @@ def evaluate(model, args, worker_init, device, criterion):
         train_data = pretraining_dataset(data_file, args.max_predictions_per_seq)
         train_sampler = RandomSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler,
-                                        batch_size=args.train_batch_size * 2 * args.n_gpu,
+                                        batch_size=args.train_batch_size * args.n_gpu,
                                         num_workers=4, worker_init_fn=worker_init,
                                         pin_memory=True)
     else:
@@ -572,7 +571,10 @@ def evaluate(model, args, worker_init, device, criterion):
 
         train_iter = train_dataloader
 
+        # f_loss = 0.0
         for step, batch in enumerate(train_iter):
+            if batch[0].shape[0] != args.train_batch_size:
+                continue
             batch = [t.to(device) for t in batch]
             input_ids, segment_ids, input_mask, masked_lm_labels, next_sentence_labels = batch
             # prediction_scores, seq_relationship_score = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
@@ -580,14 +582,21 @@ def evaluate(model, args, worker_init, device, criterion):
             loss = criterion(prediction_scores, masked_lm_labels)
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
+            # f_loss += loss.item()
             average_loss += loss.item()
             divisor += 1
+        # print (f_loss)
+        del train_dataloader
+        train_dataloader, data_file = dataset_future.result(timeout=None)
+    
+    average_loss = torch.tensor([average_loss]).cuda()
+    torch.distributed.all_reduce(average_loss)
+    average_loss = average_loss.item() / 8
 
     if is_main_process():
         dllogger.log(step="VALIDATION_LOSS", data={"eval_loss": average_loss / divisor})
         print ("validation loss: ", average_loss / divisor)
 
-    del train_dataloader
     return average_loss
         
 
@@ -614,6 +623,9 @@ def main():
 
     raw_train_start = None
     if args.do_train:
+        # if args.do_eval:
+        #     evaluate(model, args, worker_init, device, criterion)
+
         if is_main_process():
             dllogger.log(step="PARAMETER", data={"train_start": True})
             dllogger.log(step="PARAMETER", data={"batch_size_per_gpu": args.train_batch_size})

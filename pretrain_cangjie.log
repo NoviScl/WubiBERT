@@ -1,14 +1,61 @@
 /mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5
-Logs written to /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210413140119.log
-+ '[' -z /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210413140119.log ']'
-+ tee /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210413140119.log
+Logs written to /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210414150849.log
++ '[' -z /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210414150849.log ']'
++ tee /mnt/datadisk0/scl/results/bert_lamb_pretraining.pyt_bert_pretraining_phase1_fp16_gbs65536.210414150849.log
 + python3 -m torch.distributed.launch --master_port=1234 --nproc_per_node=8 ./run_pretraining.py --input_dir=/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5 --output_dir=/mnt/datadisk0/scl/results/checkpoints_cangjie_22675 --config_file=configs/bert_config_vocab22675.json --bert_model=bert-tiny-uncased --train_batch_size=8192 --max_seq_length=128 --max_predictions_per_seq=20 --max_steps=7038 --warmup_proportion=0.2843 --num_steps_per_checkpoint=800 --learning_rate=10e-3 --seed=12439 --fp16 --gradient_accumulation_steps=32 --allreduce_post_accumulation --allreduce_post_accumulation_fp16 --do_train --do_eval --json-summary /mnt/datadisk0/scl/results/dllogger.json
-device: cuda:3 n_gpu: 1, distributed training: True, 16-bits training: True
 device: cuda:7 n_gpu: 1, distributed training: True, 16-bits training: True
 device: cuda:6 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:1 n_gpu: 1, distributed training: True, 16-bits training: True
+device: cuda:3 n_gpu: 1, distributed training: True, 16-bits training: True
 device: cuda:4 n_gpu: 1, distributed training: True, 16-bits training: True
 device: cuda:2 n_gpu: 1, distributed training: True, 16-bits training: True
-device: cuda:1 n_gpu: 1, distributed training: True, 16-bits training: True
 device: cuda:5 n_gpu: 1, distributed training: True, 16-bits training: True
 device: cuda:0 n_gpu: 1, distributed training: True, 16-bits training: True
-DLL 2021-04-13 14:01:21.714018 - PARAMETER Config : ["Namespace(allreduce_post_accumulation=True, allreduce_post_accumulation_fp16=True, amp=False, bert_model='bert-tiny-uncased', checkpoint_activations=False, config_file='configs/bert_config_vocab22675.json', disable_progress_bar=False, do_eval=True, do_train=True, fp16=True, gradient_accumulation_steps=32, init_checkpoint=None, init_loss_scale=1048576, input_dir='/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5', json_summary='/mnt/datadisk0/scl/results/dllogger.json', learning_rate=0.01, local_rank=0, log_freq=1.0, loss_scale=0.0, max_predictions_per_seq=20, max_seq_length=128, max_steps=7038.0, n_gpu=1, num_steps_per_checkpoint=800, num_train_epochs=3.0, output_dir='/mnt/datadisk0/scl/results/checkpoints_cangjie_22675', phase1_end_step=7038, phase2=False, resume_from_checkpoint=False, resume_step=-1, seed=12439, skip_checkpoint=False, steps_this_run=7038.0, train_batch_size=256, use_env=False, warmup_proportion=0.2843)"] 
+DLL 2021-04-14 15:08:53.551874 - PARAMETER Config : ["Namespace(allreduce_post_accumulation=True, allreduce_post_accumulation_fp16=True, amp=False, bert_model='bert-tiny-uncased', checkpoint_activations=False, config_file='configs/bert_config_vocab22675.json', disable_progress_bar=False, do_eval=True, do_train=True, fp16=True, gradient_accumulation_steps=32, init_checkpoint=None, init_loss_scale=1048576, input_dir='/mnt/datadisk0/scl/baike/hdf5_cangjie_zh_22675_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5', json_summary='/mnt/datadisk0/scl/results/dllogger.json', learning_rate=0.01, local_rank=0, log_freq=1.0, loss_scale=0.0, max_predictions_per_seq=20, max_seq_length=128, max_steps=7038.0, n_gpu=1, num_steps_per_checkpoint=800, num_train_epochs=3.0, output_dir='/mnt/datadisk0/scl/results/checkpoints_cangjie_22675', phase1_end_step=7038, phase2=False, resume_from_checkpoint=False, resume_step=-1, seed=12439, skip_checkpoint=False, steps_this_run=7038.0, train_batch_size=256, use_env=False, warmup_proportion=0.2843)"] 
+Selected optimization level O2:  FP16 training with FP32 batchnorm and FP32 master weights.
+
+Defaults for this optimization level are:
+enabled                : True
+opt_level              : O2
+cast_model_type        : torch.float16
+patch_torch_functions  : False
+keep_batchnorm_fp32    : True
+master_weights         : True
+loss_scale             : dynamic
+Processing user overrides (additional kwargs that are not None)...
+After processing overrides, optimization options are:
+enabled                : True
+opt_level              : O2
+cast_model_type        : torch.float16
+patch_torch_functions  : False
+keep_batchnorm_fp32    : True
+master_weights         : True
+loss_scale             : dynamic
+DLL 2021-04-14 15:09:01.910242 - PARAMETER SEED : 12439 
+DLL 2021-04-14 15:09:01.910669 - PARAMETER train_start : True 
+DLL 2021-04-14 15:09:01.910739 - PARAMETER batch_size_per_gpu : 256 
+DLL 2021-04-14 15:09:01.910775 - PARAMETER learning_rate : 0.01 
+DLL 2021-04-14 15:09:11.361022 - PARAMETER loss_scale : 524288.0 
+DLL 2021-04-14 15:09:11.362582 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.188720703125  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-14 15:09:19.449778 - PARAMETER loss_scale : 262144.0 
+DLL 2021-04-14 15:09:19.451011 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.1865234375  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-14 15:09:27.537916 - PARAMETER loss_scale : 131072.0 
+DLL 2021-04-14 15:09:27.539282 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.189453125  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-14 15:09:35.676603 - PARAMETER loss_scale : 65536.0 
+DLL 2021-04-14 15:09:35.677970 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.18994140625  step_loss : 10.1875  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-14 15:09:43.803945 - PARAMETER loss_scale : 32768.0 
+DLL 2021-04-14 15:09:43.805183 - Training Epoch: 0 Training Iteration: 0  average_loss : 10.18701171875  step_loss : 10.1953125  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-14 15:09:52.037160 - Training Epoch: 0 Training Iteration: 1  average_loss : 10.189697265625  step_loss : 10.1953125  learning_rate : 4.99774251970385e-06 
+DLL 2021-04-14 15:10:00.266654 - Training Epoch: 0 Training Iteration: 2  average_loss : 10.186767578125  step_loss : 10.1875  learning_rate : 9.9954850394077e-06 
+DLL 2021-04-14 15:10:08.513631 - Training Epoch: 0 Training Iteration: 3  average_loss : 10.185546875  step_loss : 10.1953125  learning_rate : 1.499322755911155e-05 
+DLL 2021-04-14 15:10:16.773213 - Training Epoch: 0 Training Iteration: 4  average_loss : 10.189453125  step_loss : 10.1953125  learning_rate : 1.99909700788154e-05 
+DLL 2021-04-14 15:10:25.019739 - Training Epoch: 0 Training Iteration: 5  average_loss : 10.181640625  step_loss : 10.1953125  learning_rate : 2.498871259851925e-05 
+DLL 2021-04-14 15:10:33.279378 - Training Epoch: 0 Training Iteration: 6  average_loss : 10.18310546875  step_loss : 10.1796875  learning_rate : 2.99864551182231e-05 
+DLL 2021-04-14 15:10:41.527848 - Training Epoch: 0 Training Iteration: 7  average_loss : 10.18310546875  step_loss : 10.1953125  learning_rate : 3.498419763792695e-05 
+DLL 2021-04-14 15:10:49.785452 - Training Epoch: 0 Training Iteration: 8  average_loss : 10.177734375  step_loss : 10.1640625  learning_rate : 3.99819401576308e-05 
+DLL 2021-04-14 15:10:58.041667 - Training Epoch: 0 Training Iteration: 9  average_loss : 10.1748046875  step_loss : 10.1796875  learning_rate : 4.497968267733465e-05 
+DLL 2021-04-14 15:11:06.299863 - Training Epoch: 0 Training Iteration: 10  average_loss : 10.16650390625  step_loss : 10.171875  learning_rate : 4.99774251970385e-05 
+DLL 2021-04-14 15:11:14.798897 - Training Epoch: 0 Training Iteration: 11  average_loss : 10.16162109375  step_loss : 10.1796875  learning_rate : 5.497516771674236e-05 
+DLL 2021-04-14 15:11:23.063171 - Training Epoch: 0 Training Iteration: 12  average_loss : 10.1640625  step_loss : 10.1640625  learning_rate : 5.99729102364462e-05 
+DLL 2021-04-14 15:11:31.319942 - Training Epoch: 0 Training Iteration: 13  average_loss : 10.137451171875  step_loss : 10.1484375  learning_rate : 6.497065275615006e-05 
+DLL 2021-04-14 15:11:39.583157 - Training Epoch: 0 Training Iteration: 14  average_loss : 10.130126953125  step_loss : 10.1484375  learning_rate : 6.99683952758539e-05 
