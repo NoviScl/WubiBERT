@@ -783,9 +783,10 @@ def main():
                                             'data_loader': None if global_step >= args.max_steps else train_dataloader}, output_save_file)
 
                                 most_recent_ckpts_paths.append(output_save_file)
-                                if len(most_recent_ckpts_paths) > 3:
-                                    ckpt_to_be_removed = most_recent_ckpts_paths.pop(0)
-                                    os.remove(ckpt_to_be_removed)
+                                ## keep all checkpoints
+                                # if len(most_recent_ckpts_paths) > 3:
+                                #     ckpt_to_be_removed = most_recent_ckpts_paths.pop(0)
+                                #     os.remove(ckpt_to_be_removed)
                             
                             if args.do_eval:
                                 evaluate(model, args, worker_init, device, criterion)

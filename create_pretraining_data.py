@@ -457,10 +457,10 @@ def main():
 
     # tokenizer = BertTokenizer(args.vocab_file, do_lower_case=args.do_lower_case, max_len=512)
     # tokenizer = ConcatSepTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
-    # tokenizer = RawZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
+    tokenizer = RawZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
     # tokenizer = WubiZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
     # tokenizer = BertZhTokenizer(args.vocab_file, do_lower_case=True, max_len=512)
-    tokenizer = CommonZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
+    # tokenizer = CommonZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
     
     
     input_files = []
