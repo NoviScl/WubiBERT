@@ -758,10 +758,10 @@ def main():
 
                     if global_step >= args.steps_this_run or training_steps % (
                             args.num_steps_per_checkpoint * args.gradient_accumulation_steps) == 0 or timeout_sent:
-                        # eval on dev set
-                        if args.do_eval:
-                            evaluate(model, args, worker_init, device, criterion)
-                        model.train()
+                        # # eval on dev set
+                        # if args.do_eval:
+                        #     evaluate(model, args, worker_init, device, criterion)
+                        # model.train()
 
                         # if is_main_process() and not args.skip_checkpoint:
                         if not args.skip_checkpoint:
