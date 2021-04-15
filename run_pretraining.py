@@ -758,14 +758,16 @@ def main():
 
                     if global_step >= args.steps_this_run or training_steps % (
                             args.num_steps_per_checkpoint * args.gradient_accumulation_steps) == 0 or timeout_sent:
-                        if is_main_process() and not args.skip_checkpoint:
-                            # eval on dev set
-                            if args.do_eval:
-                                evaluate(model, args, worker_init, device, criterion)
-                            model.train()
+                        # eval on dev set
+                        if args.do_eval:
+                            evaluate(model, args, worker_init, device, criterion)
+                        model.train()
 
+                        # if is_main_process() and not args.skip_checkpoint:
+                        if not args.skip_checkpoint:
                             # Save a trained model
-                            dllogger.log(step="PARAMETER", data={"checkpoint_step": global_step})
+                            if is_main_process():
+                                dllogger.log(step="PARAMETER", data={"checkpoint_step": global_step})
                             model_to_save = model.module if hasattr(model,
                                                                     'module') else model  # Only save the model it-self
                             if args.resume_step < 0 or not args.phase2:
@@ -784,6 +786,10 @@ def main():
                                 if len(most_recent_ckpts_paths) > 3:
                                     ckpt_to_be_removed = most_recent_ckpts_paths.pop(0)
                                     os.remove(ckpt_to_be_removed)
+                            
+                            if args.do_eval:
+                                evaluate(model, args, worker_init, device, criterion)
+                            model.train()
 
                         # Exiting the training due to hitting max steps, or being sent a 
                         # timeout from the cluster scheduler
