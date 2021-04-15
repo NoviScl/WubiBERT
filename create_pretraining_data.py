@@ -27,7 +27,7 @@ from tqdm import tqdm, trange
 
 from tokenization import BertTokenizer
 import tokenization as tokenization
-from tokenization import ConcatSepTokenizer, WubiZhTokenizer, RawZhTokenizer, BertZhTokenizer, CangjieTokenizer
+from tokenization import ConcatSepTokenizer, WubiZhTokenizer, RawZhTokenizer, BertZhTokenizer, CangjieTokenizer, CommonZhTokenizer
 
 import random
 import collections
@@ -460,7 +460,7 @@ def main():
     # tokenizer = RawZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
     # tokenizer = WubiZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
     # tokenizer = BertZhTokenizer(args.vocab_file, do_lower_case=True, max_len=512)
-    tokenizer = CangjieTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
+    tokenizer = CommonZhTokenizer(args.vocab_file, args.model_file, do_lower_case=True, max_len=512)
     
     
     input_files = []

@@ -585,6 +585,13 @@ def evaluate(model, args, worker_init, device, criterion):
             # f_loss += loss.item()
             average_loss += loss.item()
             divisor += 1
+
+            if divisor == 2000:
+                break
+        
+        if divisor == 2000:
+            break
+
         # print (f_loss)
         del train_dataloader
         train_dataloader, data_file = dataset_future.result(timeout=None)
