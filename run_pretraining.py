@@ -692,7 +692,7 @@ def main():
             if args.allreduce_post_accumulation:
                 overflow_buf = torch.cuda.IntTensor([0])
 
-            for f_id in range(f_start_id, len(files)):
+            for f_id in range(f_start_id + 1, len(files)):
                 # print ("epoch: {}, f_id: {}".format(epoch, f_id))
    
                 if get_world_size() > num_files:
@@ -774,15 +774,17 @@ def main():
                                 output_save_file = os.path.join(args.output_dir, "ckpt_{}.pt".format(global_step))
                             else:
                                 output_save_file = os.path.join(args.output_dir, "ckpt_{}.pt".format(global_step + args.phase1_end_step))
-                            if args.do_train:
-                                torch.save({'model': model_to_save.state_dict(),
-                                            'optimizer': optimizer.state_dict(),
-                                            'master params': list(amp.master_params(optimizer)),
-                                            'files': [f_id] + files,
-                                            'epoch': epoch,
-                                            'data_loader': None if global_step >= args.max_steps else train_dataloader}, output_save_file)
+                            
+                            if is_main_process():
+                                if args.do_train:
+                                    torch.save({'model': model_to_save.state_dict(),
+                                                'optimizer': optimizer.state_dict(),
+                                                'master params': list(amp.master_params(optimizer)),
+                                                'files': [f_id] + files,
+                                                'epoch': epoch,
+                                                'data_loader': None if global_step >= args.max_steps else train_dataloader}, output_save_file)
 
-                                most_recent_ckpts_paths.append(output_save_file)
+                                    most_recent_ckpts_paths.append(output_save_file)
                                 ## keep all checkpoints
                                 # if len(most_recent_ckpts_paths) > 3:
                                 #     ckpt_to_be_removed = most_recent_ckpts_paths.pop(0)
