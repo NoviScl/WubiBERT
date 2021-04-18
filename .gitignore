@@ -1,0 +1,9 @@
+**/__pycache__/**
+*/__pycache__/*
+datasets/*
+slurm_output/*
+logs/*
+results/*
+tokenize_results/*
+*.pkl
+**/__pycache__/**

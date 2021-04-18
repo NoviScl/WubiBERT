@@ -56,8 +56,8 @@ output_dirs=(
 
 seeds=(
     "2"
-    # "23"
-    # "234"
+    "23"
+    "234"
 )
 
 # Change these
@@ -67,31 +67,38 @@ seeds=(
 # task_name="afqmc"
 # task_name="csl"
 # task_name="ocnli"
+# task_name="chid"
 task_name="c3"
-script="./scripts/run_mrc_${task_name}.sh"  # MRC tasks
-# script="./scripts/run_finetune.sh"          # classification
 
 # epochs=6  # All 6 classification tasks
-epochs=8  # C3
 # epochs=3  # cmrc
-# epochs=4  # chid
-batch_size=24
-gradient_accumulation_steps=1
+# epochs=6  # chid
+epochs=6  # C3
+# batch_size=24
+
+mode="train eval test"
+# mode="test"
 
 # Fewshot
-# fewshot=1       # 1 = true
+fewshot=0       # 1 = true
 # epochs=50
 # batch_size=4
-# gradient_accumulation_steps=1
+
+data_dir="datasets/${task_name}/split"
+# data_dir="datasets/${task_name}"
 
 
-data_dir="datasets/${task_name}"
 
+if [ "$task_name" = "chid" ] || [ "$task_name" = "c3" ] || [ "$task_name" = "cmrc" ] ; then
+  script="./scripts/run_mrc_${task_name}.sh"
+else
+  script="./scripts/run_finetune.sh"
+fi
 
 # Don't change below
 for seed in ${seeds[@]}
 do
-    for i in {2..2}
+    for i in {0..3}
     do
         # Model
         init_checkpoint="results/${init_checkpoints[$i]}"
@@ -104,19 +111,27 @@ do
         output_dir="logs/${task_name}/${output_dirs[$i]}"
 
         # echo $init_checkpoint
-        echo $output_dir
-        echo $seed
+        echo $script $task_name $tokenizer_type $seed
+        # echo $seed
+        # echo $script
 
         # Submit to slurm
-        slurm_output_dir="slurm_output/${task_name}/${output_dirs[$i]}"
+        if [ fewshot = 1 ] ; then
+            slurm_output_dir="slurm_output/${task_name}/${output_dirs[$i]}/fewshot"
+        else
+            slurm_output_dir="slurm_output/${task_name}/${output_dirs[$i]}"
+        fi
         mkdir -p slurm_output/$task_name
+        mkdir -p slurm_output/${task_name}/${output_dirs[$i]}
         mkdir -p $slurm_output_dir
+
         # echo "$slurm_output_dir/slurm-%j.out"
+        
         sbatch -N 1 \
         -n 5 \
         -G 1 \
         --no-requeue \
-        -o "$slurm_output_dir/slurm-%j.out" \
+        -o "${slurm_output_dir}/seed${seed}-%j.out" \
         --export=init_checkpoint="$init_checkpoint",\
 task_name="$task_name",\
 config_file="$config_file",\
@@ -129,8 +144,7 @@ seed=$seed,\
 epochs=$epochs,\
 fewshot=$fewshot,\
 batch_size=$batch_size,\
-gradient_accumulation_steps=$gradient_accumulation_steps,\
-mode="train eval" \
+mode="$mode" \
         ${script}
     done
 done

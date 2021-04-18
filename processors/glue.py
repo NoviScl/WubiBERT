@@ -213,7 +213,8 @@ class WscProcessor(DataProcessor):
                 text_a_list.insert(query_idx + len(query) + 2 + 1, "_")
             text_a = "".join(text_a_list)
             text_b = None
-            label = str(line['label']) if set_type != 'test' else 'true'
+            # label = str(line['label']) if set_type != 'test' else 'true'
+            label = str(line['label'])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -248,7 +249,8 @@ class AfqmcProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text_a = line['sentence1']
             text_b = line['sentence2']
-            label = str(line['label']) if set_type != 'test' else "0"
+            # label = str(line['label']) if set_type != 'test' else "0"
+            label = str(line['label'])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -283,7 +285,8 @@ class CslProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text_a = " ".join(line['keyword'])
             text_b = line['abst']
-            label = str(line['label']) if set_type != 'test' else '0'
+            # label = str(line['label']) if set_type != 'test' else '0'
+            label = str(line['label'])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -318,7 +321,8 @@ class OcnliProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text_a = line["sentence1"]
             text_b = line["sentence2"]
-            label = str(line["label"]) if set_type != 'test' else 'neutral'
+            # label = str(line["label"]) if set_type != 'test' else 'neutral'
+            label = str(line['label'])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -481,8 +485,10 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     features = []
     for (ex_index, example) in enumerate(examples):
         # in OCNLI, examples with label = '-' should be skipped
+        # or set to 'neutral'?
         if example.label == '-':
-            continue
+            example.label = 'neutral'
+        #     continue
         tokens_a = tokenizer.tokenize(example.text_a)
 
         tokens_b = None

@@ -18,23 +18,24 @@ tokenizer_type=${tokenizer_type:-"RawZh"}
 # tokenizer_type=${tokenizer_type:-"BertZh"}
 
 # Dataset
-task_name=${task_name:-"csl"}
-data_dir=${data_dir:-"datasets/$task_name"}
+task_name=${task_name:-"tnews"}
+data_dir=${data_dir:-"datasets/$task_name/split"}
 
 seed=${seed:-"2"}
-out_dir=${out_dir:-"logs/temp"}
+out_dir=${out_dir:-"logs/${task_name}/wubi_zh"}
 # mode=${mode:-"prediction"}
-mode=${mode:-"train eval"}
+mode=${mode:-"test"}
 num_gpu=${num_gpu:-"1"}
 
 # Hyperparameters
-epochs=${epochs:-"4"}
+epochs=${epochs:-"6"}
 max_steps=${13:-"-1.0"}
 batch_size=${batch_size:-"32"}
 gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
 max_seq_length=${max_seq_length:-128}
+fewshot=${fewshot:-1}
 # precision=${14:-"fp16"}
 
 mkdir -p $out_dir
@@ -63,12 +64,12 @@ if [[ $mode == *"train"* ]] ; then
   CMD+="--do_train "
   CMD+="--train_batch_size=$batch_size "
 fi
-if [[ $mode == *"eval"* ]] || [[ $mode == *"pred"* ]]; then
+if [[ $mode == *"eval"* ]] || [[ $mode == *"test"* ]]; then
   if [[ $mode == *"eval"* ]] ; then
     CMD+="--do_eval "
   fi
-  if [[ $mode == *"pred"* ]] ; then
-    CMD+="--do_predict "
+  if [[ $mode == *"test"* ]] ; then
+    CMD+="--do_test "
   fi
   CMD+="--eval_batch_size=$batch_size "
 fi

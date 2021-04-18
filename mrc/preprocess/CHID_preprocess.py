@@ -435,12 +435,15 @@ def generate_input(
     max_num_choices,
     is_training=True):
     if os.path.exists(feature_file):
+        print('Found feature file: ' + feature_file + ', loading...')
         features = pickle.load(open(feature_file, 'rb'))
     elif os.path.exists(example_file):
+        print('Found example file: ' + example_file + ', loading...')
         examples = pickle.load(open(example_file, 'rb'))
         features = convert_examples_to_features(examples, tokenizer, max_seq_length, max_num_choices)
         pickle.dump(features, open(feature_file, 'wb'))
     else:
+        print('Feature and example file not found, generating...')
         examples = read_chid_examples(data_file, label_file, is_training=is_training)
         # examples = examples[:10]
         pickle.dump(examples, open(example_file, 'wb'))

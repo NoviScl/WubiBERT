@@ -13,14 +13,10 @@ tokenizer_type=${tokenizer_type:-"RawZh"}
 fewshot=${fewshot:-0}
 
 data_dir=${data_dir:-"datasets/$task_name"}
-out_dir=${out_dir:-"logs/$task_name"}
+out_dir=${out_dir:-"logs/${task_name}/wubi_zh"}
 
 seed=${seed:-2}
 epochs=${epochs:-2}
-
-if [[ $fewshot == '1' ]] ; then
-  fewshot = 
-fi
 
 python3 run_mrc.py \
   --train_epochs=${epochs} \
@@ -44,7 +40,6 @@ python3 run_mrc.py \
   --checkpoint_dir=${out_dir} \
   --seed=${seed} \
   --do_train \
-  --fewshot=fewshot \
   # --gpu_ids="0,1" \
   # --init_restore_dir=$BERT_DIR/pytorch_model.pth \
 

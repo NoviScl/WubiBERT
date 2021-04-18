@@ -27,7 +27,7 @@ import json
 import time
 from shutil import copyfile
 
-import dllogger
+# import dllogger
 import numpy as np
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
@@ -64,6 +64,9 @@ ALL_TOKENIZERS = {
     "Bert": BertTokenizer,
     "BertHF": BertTokenizer
 }
+
+FILENAME_BEST_MODEL = 'best_model.bin'
+FILENAME_TEST_RESULT = 'result_test.txt'
 
 def compute_metrics(task_name, preds, labels):
     assert len(preds) == len(labels)
@@ -210,7 +213,7 @@ def parse_args(parser=argparse.ArgumentParser()):
                         action='store_true',
                         help="Whether to get model-task performance on the dev"
                         " set by running eval.")
-    parser.add_argument("--do_predict",
+    parser.add_argument("--do_test",
                         action='store_true',
                         help="Whether to output prediction results on the dev "
                         "set by running eval. Changed: do eval on test set.")
@@ -447,6 +450,10 @@ def get_train_features(data_dir, bert_model, max_seq_length, do_lower_case,
 
 def dump_predictions(path, label_map, preds, examples):
     label_rmap = {label_idx: label for label, label_idx in label_map.items()}
+    # print(len(preds), len(examples))
+    # print(label_rmap)
+    # for i, example in enumerate(examples):
+        # print(i, example.guid, preds[i])
     predictions = {
         example.guid: label_rmap[preds[i]] for i, example in enumerate(examples)
     }
@@ -473,63 +480,163 @@ def get_tokenization_result(args):
         "sp_concat_30k_sep.model",
         "bert_chinese_uncased_22675.model",
     ]
-    for i in range(4):
-        tokenizer_type = tokenizer_types[i]
-        vocab_file = 'tokenizers/' + vocab_files[i]
-        vocab_model_file = 'tokenizers/' + vocab_model_files[i]
-        out_file = 'tokenize_results/' + vocab_files[i][:-6]
-        tokenizer = ALL_TOKENIZERS[tokenizer_type](vocab_file, vocab_model_file)
-        filename = args.data_dir + '/dev.json'
-        lines = open(filename, 'r').readlines()
-        lines = lines[:100]
-        examples = [json.loads(line) for line in lines]
-        tokenized = []
-        for ex in examples:
-            abst = ex['abst']
-            keywords = ' '.join(ex['keyword'])
-            abst = tokenizer.tokenize(abst)
-            keywords = tokenizer.tokenize(keywords)
-            tokenized.append({
-                'abst': abst,
-                'keywords': keywords,
+    out_dirs = [
+        'wubi_zh',
+        'raw_zh',
+        'concat_sep',
+        'bert_zh_22675',
+    ]
+    TASK_NAME = 'csl'
+    DATA_DIR = os.path.join('datasets', TASK_NAME, 'split')
+
+    idx_a = 0
+    idx_b = 1
+
+    def get_preds_file(idx, seed):
+        return os.path.join('logs', TASK_NAME, out_dirs[idx], str(seed), 'predictions.json')
+
+    def get_tokenizer(idx):
+        vocab_file = os.path.join('tokenizers', vocab_files[idx])
+        vocab_model_file = os.path.join('tokenizers', vocab_model_files[idx])
+        return ALL_TOKENIZERS[tokenizer_types[idx]](vocab_file, vocab_model_file)
+
+    processor = PROCESSORS[TASK_NAME]()
+    test_examples = processor.get_test_examples(DATA_DIR)
+    tokenizers = [get_tokenizer(i) for i in range(4)]
+    preds_files = [get_preds_file(i, 2) for i in range(4)]
+    preds = [json.load(open(preds_files[i], 'r', encoding='utf8')) for i in range(4)]
+    # tokenizer_a = get_tokenizer(idx_a)
+    # tokenizer_b = get_tokenizer(idx_b)
+
+    # preds_file_a = get_preds_file(idx_a, 2)
+    # preds_file_b = get_preds_file(idx_b, 2)
+
+    # preds_a = json.load(open(preds_file_a, 'r', encoding='utf8'))
+    # preds_b = json.load(open(preds_file_b, 'r', encoding='utf8'))
+    
+    diff_ex = []
+    
+    num_diff = 0
+    for test_id in preds[0]:
+        if preds[idx_a][test_id] != preds[idx_b][test_id]:
+            num_diff += 1
+            idx = int(test_id[5:])
+            ex = test_examples[idx]
+            diff_ex.append(ex)
+            # print(ex)
+    
+    diff_ex = diff_ex[:100]
+
+    def tokenize_examples(examples, tokenizer, preds):
+        def _truncate_seq_pair(tokens_a, tokens_b, max_length):
+            """Truncates a sequence pair in place to the maximum length."""
+
+            # This is a simple heuristic which will always truncate the longer sequence
+            # one token at a time. This makes more sense than truncating an equal percent
+            # of tokens from each, since if one sequence is very short then each token
+            # that's truncated likely contains more information than a longer sequence.
+            while True:
+                total_length = len(tokens_a) + len(tokens_b)
+                if total_length <= max_length:
+                    break
+                if len(tokens_a) > len(tokens_b):
+                    tokens_a.pop()
+                else:
+                    tokens_b.pop()
+
+        result = []
+        for i, ex in enumerate(examples):
+            tokens_a = tokenizer.tokenize(ex.text_a)
+            tokens_b = tokenizer.tokenize(ex.text_b)
+            _truncate_seq_pair(tokens_a, tokens_b, 128 - 3)
+            tokens = ["[CLS]"] + tokens_a + ["[SEP]"] + tokens_b + ['[SEP]']
+            # input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            
+            result.append({
+                'guid': ex.guid,
+                'label': preds[ex.guid],
+                'tokens': tokens,
+                # 'input_ids': input_ids,
             })
-        with open(out_file + '.txt', 'w', encoding='utf-8') as f:
-            for t in tokenized:
-                f.write(json.dumps(t, ensure_ascii=False))
+        return result
+
+    TARGET_DIR = os.path.join('tokenize_results', TASK_NAME, '2')
+    FILE_ORIG = os.path.join(TARGET_DIR, 'original.json')
+    # FILE_A = os.path.join(TARGET_DIR, tokenizer_types[idx_a] + '.json')
+    # FILE_B = os.path.join(TARGET_DIR, tokenizer_types[idx_b] + '.json')
+    files = [os.path.join(TARGET_DIR, tokenizer_types[i] + '.json') for i in range(4)]
+
+    os.makedirs(TARGET_DIR, exist_ok=True)
+    for file in [FILE_ORIG] + files:
+        with open(file, 'w') as f:
+            f.write('')
+
+    # result_a = tokenize_examples(diff_ex, tokenizer_a, preds_a)
+    # result_b = tokenize_examples(diff_ex, tokenizer_b, preds_b)
+    results = [tokenize_examples(diff_ex, tokenizers[i], preds[i]) for i in range(4)]
+    examples = [{
+        'guid': ex.guid,
+        'label': ex.label,
+        'text_a': ex.text_a,
+        'text_b': ex.text_b,
+    } for ex in diff_ex]
+
+    def dump_json(file, data):
+        with open(file, 'w') as f:
+            for d in data:
+                f.write(json.dumps(d, ensure_ascii=False))
                 f.write('\n')
+
+    # dump_json(FILE_A, result_a)
+    # dump_json(FILE_B, result_b)
+    for i in range(4):
+        dump_json(files[i], results[i])
+    dump_json(FILE_ORIG, examples)
+    exit(0)
+        
+
+    # for i in range(4):
+    #     tokenizer_type = tokenizer_types[i]
+    #     vocab_file = 'tokenizers/' + vocab_files[i]
+    #     vocab_model_file = 'tokenizers/' + vocab_model_files[i]
+    #     out_file = 'tokenize_results/' + vocab_files[i][:-6]
+    #     tokenizer = ALL_TOKENIZERS[tokenizer_type](vocab_file, vocab_model_file)
+    #     filename = args.data_dir + '/dev.json'
+    #     lines = open(filename, 'r').readlines()
+
+    #     lines = lines[:100]  # Pick the first 100
+        
+    #     examples = [json.loads(line) for line in lines]
+    #     tokenized = []
+    #     for ex in examples:
+    #         abst = ex['abst']
+    #         keywords = ' '.join(ex['keyword'])
+    #         abst = tokenizer.tokenize(abst)
+    #         keywords = tokenizer.tokenize(keywords)
+    #         tokenized.append({
+    #             'abst': abst,
+    #             'keywords': keywords,
+    #         })
+    #     with open(out_file + '.txt', 'w', encoding='utf-8') as f:
+    #         for t in tokenized:
+    #             f.write(json.dumps(t, ensure_ascii=False))
+    #             f.write('\n')
     exit(0)
 
 
-def main(args):
-    print("main() in run_glue.py")
-    logger.info("Arguments:")
-    logger.info(json.dumps(vars(args), indent=4))
-
-    # Setup output files
-    if args.fewshot == 0:
-        output_dir = os.path.join(args.output_dir, str(args.seed))
-        is_fewshot = False
-    else:
-        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
-        is_fewshot = True
-    os.makedirs(output_dir, exist_ok=True)
-    filename_params = os.path.join(output_dir, 'params.json')
-    json.dump(vars(args), open(filename_params, 'w'), indent=4)
+def load_model(config_file, filename, num_labels):
+    # Prepare model
+    config = modeling.BertConfig.from_json_file(config_file)
+    # Padding for divisibility by 8
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+    model = modeling.BertForSequenceClassification(config, num_labels=num_labels)
+    state_dict = torch.load(filename, map_location='cpu')
+    model.load_state_dict(state_dict["model"], strict=False)
+    return model
 
 
-    
-    args.fp16 = args.fp16 or args.amp
-    if args.server_ip and args.server_port:
-        # Distant debugging - see
-        # https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
-        import ptvsd
-        logger.info("Waiting for debugger attach")
-        ptvsd.enable_attach(
-            address=(args.server_ip, args.server_port),
-            redirect_output=True,
-        )
-        ptvsd.wait_for_attach()
-
+def train(args):
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device(
             "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -542,130 +649,60 @@ def main(args):
         # sychronizing nodes/GPUs.
         if not torch.distributed.is_initialized():
             torch.distributed.init_process_group(backend='nccl')
-    logger.info("device: {} n_gpu: {}, distributed training: {}, "
-                "16-bits training: {}".format(
-                    device,
-                    n_gpu,
-                    bool(args.local_rank != -1),
-                    args.fp16,
-                ))
 
-    if not args.do_train and not args.do_eval and not args.do_predict:
-        raise ValueError("At least one of `do_train`, `do_eval` or "
-                         "`do_predict` must be True.")
-
-    if is_main_process():
-        if (os.path.exists(output_dir) and os.listdir(output_dir) and
-                args.do_train):
-            logger.warning("Output directory ({}) already exists and is not "
-                           "empty.".format(output_dir))
-    mkdir_by_main_process(output_dir)
-
-    if is_main_process():
-        dllogger.init(backends=[
-            dllogger.JSONStreamBackend(
-                verbosity=dllogger.Verbosity.VERBOSE,
-                filename=os.path.join(output_dir, 'dllogger.json'),
-            ),
-            dllogger.StdOutBackend(
-                verbosity=dllogger.Verbosity.VERBOSE,
-                step_format=format_step,
-            ),
-        ])
-    else:
-        dllogger.init(backends=[])
-
-    dllogger.log(step="PARAMETER", data={"Config": [str(args)]})
-
-    if args.gradient_accumulation_steps < 1:
-        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, "
-                         "should be >= 1".format(
-                             args.gradient_accumulation_steps))
-    if args.gradient_accumulation_steps > args.train_batch_size:
-        raise ValueError("gradient_accumulation_steps ({}) cannot be larger "
-                         "train_batch_size ({}) - there cannot be a fraction "
-                         "of one sample.".format(
-                             args.gradient_accumulation_steps,
-                             args.train_batch_size,
-                         ))
-    args.train_batch_size = (args.train_batch_size //
-                             args.gradient_accumulation_steps)
-
-    # Set seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
-    dllogger.log(step="PARAMETER", data={"SEED": args.seed})
-
-    logger.info('Loading tokenizer...')
+    logger.info('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
 
-    num_train_optimization_steps = None
-    if args.do_train:
-        logger.info('Getting traning features...')
-        train_features = get_train_features(
-            args.data_dir,
-            args.bert_model,
-            args.max_seq_length,
-            args.do_lower_case,
-            args.local_rank,
-            args.train_batch_size,
-            args.gradient_accumulation_steps,
-            args.num_train_epochs,
-            tokenizer,
-            processor,
-            is_fewshot=is_fewshot,
-        )
-        num_train_optimization_steps = int(
-            len(train_features) / args.train_batch_size /
-            args.gradient_accumulation_steps) * args.num_train_epochs
-        if args.local_rank != -1:
-            num_train_optimization_steps = (num_train_optimization_steps //
-                                            torch.distributed.get_world_size())
+    # Setup output files
+    if args.fewshot == 0:
+        output_dir = os.path.join(args.output_dir, str(args.seed))
+        is_fewshot = False
+    else:
+        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
+        is_fewshot = True
+    filename_params = os.path.join(output_dir, 'args_train.json')
+    json.dump(vars(args), open(filename_params, 'w'), indent=4)
+
+    # Load data
+
+    logger.info('Getting training features...')
+    train_features = get_train_features(
+        args.data_dir,
+        args.bert_model,
+        args.max_seq_length,
+        args.do_lower_case,
+        args.local_rank,
+        args.train_batch_size,
+        args.gradient_accumulation_steps,
+        args.num_train_epochs,
+        tokenizer,
+        processor,
+        is_fewshot=is_fewshot,
+    )
+    num_train_optimization_steps = int(
+        len(train_features) / args.train_batch_size /
+        args.gradient_accumulation_steps) * args.num_train_epochs
+    if args.local_rank != -1:
+        num_train_optimization_steps = (num_train_optimization_steps //
+                                        torch.distributed.get_world_size())
 
     # Prepare model
-    config = modeling.BertConfig.from_json_file(args.config_file)
-    # Padding for divisibility by 8
-    if config.vocab_size % 8 != 0:
-        config.vocab_size += 8 - (config.vocab_size % 8)
-
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-    # model = modeling.BertForSequenceClassification(
-    #     config,
-    #     num_labels=num_labels,
+    logger.info('Loading model from "{}"...'.format(args.init_checkpoint))
+    model = load_model(args.config_file, args.init_checkpoint, num_labels)
+    logger.info('Loaded model from "{}"'.format(args.init_checkpoint))
+    # dllogger.log(
+    #     step="PARAMETER",
+    #     data={
+    #         "num_parameters":
+    #             sum([p.numel() for p in model.parameters() if p.requires_grad]),
+    #     },
     # )
-    logger.info("USING CHECKPOINT from {}".format(args.init_checkpoint))
-    if args.tokenizer_type == 'BertHF':
-        # model.load_state_dict(
-        #     torch.load(args.init_checkpoint, map_location='cpu'),
-        #     strict=False,
-        # )
-        model = modeling.BertForSequenceClassification.from_pretrained(args.init_checkpoint, num_labels=num_labels)
-    else:
-        model = modeling.BertForSequenceClassification(
-            config,
-            num_labels=num_labels,
-        )
-        print(config)
-        model.load_state_dict(
-            torch.load(args.init_checkpoint, map_location='cpu')["model"],
-            strict=False,
-        )
-
-    logger.info("USED CHECKPOINT from {}".format(args.init_checkpoint))
-    dllogger.log(
-        step="PARAMETER",
-        data={
-            "num_parameters":
-                sum([p.numel() for p in model.parameters() if p.requires_grad]),
-        },
-    )
 
     model.to(device)
+
     # Prepare optimizer
     model, optimizer, scheduler = init_optimizer_and_amp(
         model,
@@ -689,514 +726,460 @@ def main(args):
 
     loss_fct = torch.nn.CrossEntropyLoss()
 
-    results = {}
-    if args.do_train:
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_features))
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", num_train_optimization_steps)
-        train_data = gen_tensor_dataset(train_features)
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_data)
-        else:
-            train_sampler = DistributedSampler(train_data)
-        train_dataloader = DataLoader(
-            train_data,
-            sampler=train_sampler,
-            batch_size=args.train_batch_size,
-        )
+    logger.info("***** Running training *****")
+    logger.info('  Num epochs = %d', args.num_train_epochs)
+    logger.info("  Num examples = %d", len(train_features))
+    logger.info("  Batch size = %d", args.train_batch_size)
+    logger.info("  Num steps = %d", num_train_optimization_steps)
 
-        global_step = 0
-        nb_tr_steps = 0
-        tr_loss = 0
-        latency_train = 0.0
-        nb_tr_examples = 0
+    train_data = gen_tensor_dataset(train_features)
+    if args.local_rank == -1:
+        train_sampler = RandomSampler(train_data)
+    else:
+        train_sampler = DistributedSampler(train_data)
+    train_dataloader = DataLoader(
+        train_data,
+        sampler=train_sampler,
+        batch_size=args.train_batch_size,
+    )
+
+    global_step = 0
+    num_train_steps = 0
+    total_train_loss = 0
+    latency_train = 0.0
+    num_train_examples = 0
+    model.train()
+    tic_train = time.perf_counter()
+
+    train_acc_history = []
+    eval_acc_history = []
+    train_loss_history = []
+    eval_loss_history = []
+    filename_scores = os.path.join(output_dir, "scores.txt")
+    with open(filename_scores, 'w') as f:
+        f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
+
+    # Save config
+    model_to_save = model.module if hasattr(model, 'module') else model
+    filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
+    with open(filename_config, 'w') as f:
+        f.write(model_to_save.config.to_json_string())
+
+
+    for ep in trange(int(args.num_train_epochs), desc="Epoch"):
+        # Train
         model.train()
-        tic_train = time.perf_counter()
+        total_train_loss, num_train_steps = 0, 0
+        for step, batch in enumerate(
+                tqdm(train_dataloader, desc="Iteration")):
+            if args.max_steps > 0 and global_step > args.max_steps:
+                break
+            batch = tuple(t.to(device) for t in batch)
+            input_ids, input_mask, segment_ids, label_ids = batch
+            logits = model(input_ids, segment_ids, input_mask)
+            loss = loss_fct(
+                logits.view(-1, num_labels),
+                label_ids.view(-1),
+            )
+            if n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu.
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
 
-        train_acc_history = []
-        eval_acc_history = []
-        train_loss_history = []
-        eval_loss_history = []
-        filename_scores = os.path.join(output_dir, "scores.txt")
-        with open(filename_scores, 'w') as f:
-            f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
+            if args.fp16:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
 
-        # Save config
-        model_to_save = model.module if hasattr(model, 'module') else model
-        filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
-        with open(filename_config, 'w') as f:
-            f.write(model_to_save.config.to_json_string())
+            total_train_loss += loss.item()
+            num_train_examples += input_ids.size(0)
+            num_train_steps += 1
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                if args.fp16:
+                    # modify learning rate with special warm up for BERT
+                    # which FusedAdam doesn't do
+                    scheduler.step()
+
+                optimizer.step()
+                optimizer.zero_grad()
+                global_step += 1
+        
+        train_loss = total_train_loss / (num_train_steps + 1e-10)
+        train_loss_history.append(train_loss)
+
+        # Evaluation
+        if args.do_eval and is_main_process():
+            eval_examples = processor.get_dev_examples(args.data_dir)
+            eval_features, label_map = convert_examples_to_features(
+                eval_examples,
+                processor.get_labels(),
+                args.max_seq_length,
+                tokenizer,
+            )
+            logger.info("***** Running evaluation *****")
+            logger.info("  Epoch = %d", ep)
+            logger.info("  Num examples = %d", len(eval_examples))
+            logger.info("  Batch size = %d", args.eval_batch_size)
+            eval_data = gen_tensor_dataset(eval_features)
+            # Run prediction for full data
+            eval_sampler = SequentialSampler(eval_data)
+            eval_dataloader = DataLoader(
+                eval_data,
+                sampler=eval_sampler,
+                batch_size=args.eval_batch_size,
+            )
+
+            model.eval()
+            preds = None
+            out_label_ids = None
+            total_eval_loss = 0
+            num_eval_steps, num_eval_examples = 0, 0
+            # cuda_events = [(torch.cuda.Event(enable_timing=True),
+            #                 torch.cuda.Event(enable_timing=True))
+                        # for _ in range(len(eval_dataloader))]
+            for i, (input_ids, input_mask, segment_ids, label_ids) in tqdm(
+                    enumerate(eval_dataloader),
+                    desc="Evaluating",
+            ):
+                input_ids = input_ids.to(device)
+                input_mask = input_mask.to(device)
+                segment_ids = segment_ids.to(device)
+                label_ids = label_ids.to(device)
+
+                with torch.no_grad():
+                    # cuda_events[i][0].record()
+                    logits = model(input_ids, segment_ids, input_mask)
+                    # cuda_events[i][1].record()
+                    if args.do_eval:
+                        total_eval_loss += loss_fct(
+                            logits.view(-1, num_labels),
+                            label_ids.view(-1),
+                        ).mean().item()
+
+                num_eval_steps += 1
+                num_eval_examples += input_ids.size(0)
+
+                # Get preds and output ids
+                if preds is None:
+                    preds = logits.detach().cpu().numpy()
+                    out_label_ids = label_ids.detach().cpu().numpy()
+                else:
+                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+                    out_label_ids = np.append(
+                        out_label_ids,
+                        label_ids.detach().cpu().numpy(),
+                        axis=0,
+                    )
+            # torch.cuda.synchronize()
+
+            preds = np.argmax(preds, axis=1)
+
+            # Log and update results
+            eval_acc = compute_metrics(args.task_name, preds, out_label_ids)['acc']
+            eval_loss = total_eval_loss / (num_eval_steps + 1e-10)
+            
+            # Log
+            if is_main_process():
+                logger.info("***** Results *****")
+                logger.info(f'train loss: {train_loss}')
+                logger.info(f'eval loss:  {eval_loss}')
+                logger.info(f'eval acc:   {eval_acc}')
+
+            eval_loss_history.append(eval_loss)
+            eval_acc_history.append(eval_acc)
+
+            with open(filename_scores, 'a') as f:
+                f.write(f"{ep}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
 
 
-        for ep in trange(int(args.num_train_epochs), desc="Epoch"):
-            # Train
-            model.train()
-            tr_loss, nb_tr_steps = 0, 0
-            for step, batch in enumerate(
-                    tqdm(train_dataloader, desc="Iteration")):
-                if args.max_steps > 0 and global_step > args.max_steps:
-                    break
-                batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, label_ids = batch
-                logits = model(input_ids, segment_ids, input_mask)
-                loss = loss_fct(
+        # Save model
+        if is_main_process() and not args.skip_checkpoint:
+            model_to_save = model.module if hasattr(model, 'module') else model
+            model_dir = os.path.join(output_dir, 'models')
+            os.makedirs(model_dir, exist_ok=True)
+            model_filename = os.path.join(model_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
+            torch.save(
+                {"model": model_to_save.state_dict()},
+                model_filename,
+            )
+
+            # Check if it's best model
+            if args.do_eval:
+                if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
+                    best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
+                    copyfile(model_filename, best_model_filename)
+                    logger.info("New best model saved")
+
+    logger.info('Training finished')
+
+
+def test(args):
+    # output_dir = os.path.join(args.output_dir, str(args.seed))
+    # Setup output files
+    if args.fewshot == 0:
+        output_dir = os.path.join(args.output_dir, str(args.seed))
+        is_fewshot = False
+    else:
+        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
+        is_fewshot = True
+    
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device(
+            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        n_gpu = torch.cuda.device_count()
+    else:
+        torch.cuda.set_device(args.local_rank)
+        device = torch.device("cuda", args.local_rank)
+        n_gpu = 1
+        # Initializes the distributed backend which will take care of
+        # sychronizing nodes/GPUs.
+        if not torch.distributed.is_initialized():
+            torch.distributed.init_process_group(backend='nccl')
+
+    # Tokenizer and processor
+    logger.info('Loading processor and tokenizer...')
+    processor = PROCESSORS[args.task_name]()
+    num_labels = len(processor.get_labels())
+    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+
+    # Load best model
+    best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
+    # print(best_model_filename)
+    # config_file = os.path.join(output_dir, 'config.json')
+    logger.info('Loading model from "{}"...'.format(best_model_filename))
+    model = load_model(args.config_file, best_model_filename, num_labels)
+    logger.info('Loaded model from "{}"'.format(best_model_filename))
+    model.to(device)
+
+    # Load test data
+    logger.info('Loading test data...')
+    eval_examples = processor.get_test_examples(args.data_dir)
+    eval_features, label_map = convert_examples_to_features(
+        eval_examples,
+        processor.get_labels(),
+        args.max_seq_length,
+        tokenizer,
+    )
+
+    eval_data = gen_tensor_dataset(eval_features)
+    # Run prediction for full data
+    eval_sampler = SequentialSampler(eval_data)
+    eval_dataloader = DataLoader(
+        eval_data,
+        sampler=eval_sampler,
+        batch_size=args.eval_batch_size,
+    )
+
+    # Test
+    logger.info("***** Running Test *****")
+    logger.info("  Num examples = %d", len(eval_examples))
+    logger.info("  Batch size   = %d", args.eval_batch_size)
+    loss_fct = torch.nn.CrossEntropyLoss()
+    preds = None
+    out_label_ids = None
+    total_eval_loss = 0
+    num_eval_steps, num_eval_examples = 0, 0
+    cuda_events = [(torch.cuda.Event(enable_timing=True),
+                    torch.cuda.Event(enable_timing=True))
+                    for _ in range(len(eval_dataloader))]
+
+    model.eval()
+
+    for i, (input_ids, input_mask, segment_ids, label_ids) in tqdm(
+            enumerate(eval_dataloader),
+            desc="Evaluating",
+    ):
+        input_ids = input_ids.to(device)
+        input_mask = input_mask.to(device)
+        segment_ids = segment_ids.to(device)
+        label_ids = label_ids.to(device)
+
+        with torch.no_grad():
+            cuda_events[i][0].record()
+            logits = model(input_ids, segment_ids, input_mask)
+            cuda_events[i][1].record()
+            if args.do_eval:
+                total_eval_loss += loss_fct(
                     logits.view(-1, num_labels),
                     label_ids.view(-1),
-                )
-                if n_gpu > 1:
-                    loss = loss.mean()  # mean() to average on multi-gpu.
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
+                ).mean().item()
 
-                if args.fp16:
-                    with amp.scale_loss(loss, optimizer) as scaled_loss:
-                        scaled_loss.backward()
-                else:
-                    loss.backward()
+        num_eval_steps += 1
+        num_eval_examples += input_ids.size(0)
+        if preds is None:
+            preds = logits.detach().cpu().numpy()
+            out_label_ids = label_ids.detach().cpu().numpy()
+        else:
+            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+            out_label_ids = np.append(
+                out_label_ids,
+                label_ids.detach().cpu().numpy(),
+                axis=0,
+            )
+        # print('len(preds) =', len(preds))
+    torch.cuda.synchronize()
+    preds = np.argmax(preds, axis=1)
 
-                tr_loss += loss.item()
-                nb_tr_examples += input_ids.size(0)
-                nb_tr_steps += 1
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16:
-                        # modify learning rate with special warm up for BERT
-                        # which FusedAdam doesn't do
-                        scheduler.step()
+    # Save predictions
+    dump_predictions(
+        os.path.join(output_dir, 'predictions.json'),
+        label_map,
+        preds,
+        eval_examples,
+    )
 
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_step += 1
-            
-            # Evaluation
-            if (args.do_eval or args.do_predict) and is_main_process():
-                eval_examples = processor.get_dev_examples(args.data_dir)
-                eval_features, label_map = convert_examples_to_features(
-                    eval_examples,
-                    processor.get_labels(),
-                    args.max_seq_length,
-                    tokenizer,
-                )
-                logger.info("***** Running evaluation *****")
-                logger.info("  Epoch = %d", ep)
-                logger.info("  Num examples = %d", len(eval_examples))
-                logger.info("  Batch size = %d", args.eval_batch_size)
-                eval_data = gen_tensor_dataset(eval_features)
-                # Run prediction for full data
-                eval_sampler = SequentialSampler(eval_data)
-                eval_dataloader = DataLoader(
-                    eval_data,
-                    sampler=eval_sampler,
-                    batch_size=args.eval_batch_size,
-                )
+    eval_loss = total_eval_loss / num_eval_steps
+    eval_result = compute_metrics(args.task_name, preds, out_label_ids)
+    eval_acc = eval_result['acc']
+    # results.update(eval_result)
 
-                model.eval()
-                preds = None
-                out_label_ids = None
-                eval_loss = 0
-                nb_eval_steps, nb_eval_examples = 0, 0
-                cuda_events = [(torch.cuda.Event(enable_timing=True),
-                                torch.cuda.Event(enable_timing=True))
-                            for _ in range(len(eval_dataloader))]
-                for i, (input_ids, input_mask, segment_ids, label_ids) in tqdm(
-                        enumerate(eval_dataloader),
-                        desc="Evaluating",
-                ):
-                    input_ids = input_ids.to(device)
-                    input_mask = input_mask.to(device)
-                    segment_ids = segment_ids.to(device)
-                    label_ids = label_ids.to(device)
-
-                    with torch.no_grad():
-                        cuda_events[i][0].record()
-                        logits = model(input_ids, segment_ids, input_mask)
-                        cuda_events[i][1].record()
-                        if args.do_eval:
-                            eval_loss += loss_fct(
-                                logits.view(-1, num_labels),
-                                label_ids.view(-1),
-                            ).mean().item()
-
-                    nb_eval_steps += 1
-                    nb_eval_examples += input_ids.size(0)
-                    if preds is None:
-                        preds = logits.detach().cpu().numpy()
-                        out_label_ids = label_ids.detach().cpu().numpy()
-                    else:
-                        preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                        out_label_ids = np.append(
-                            out_label_ids,
-                            label_ids.detach().cpu().numpy(),
-                            axis=0,
-                        )
-                torch.cuda.synchronize()
-                eval_latencies = [
-                    event_start.elapsed_time(event_end)
-                    for event_start, event_end in cuda_events
-                ]
-                eval_latencies = list(sorted(eval_latencies))
-
-                def infer_latency_sli(threshold):
-                    index = int(len(eval_latencies) * threshold) - 1
-                    index = min(max(index, 0), len(eval_latencies) - 1)
-                    return eval_latencies[index]
-
-                eval_throughput = (args.eval_batch_size /
-                                (np.mean(eval_latencies) / 1000))
-
-                results.update({
-                    'epoch': ep+1,
-                    'eval:num_samples_per_gpu': nb_eval_examples,
-                    'eval:num_steps': nb_eval_steps,
-                    'infer:latency(ms):50%': infer_latency_sli(0.5),
-                    'infer:latency(ms):90%': infer_latency_sli(0.9),
-                    'infer:latency(ms):95%': infer_latency_sli(0.95),
-                    'infer:latency(ms):99%': infer_latency_sli(0.99),
-                    'infer:latency(ms):100%': infer_latency_sli(1.0),
-                    'infer:latency(ms):avg': np.mean(eval_latencies),
-                    'infer:latency(ms):std': np.std(eval_latencies),
-                    'infer:latency(ms):sum': np.sum(eval_latencies),
-                    'infer:throughput(samples/s):avg': eval_throughput,
-                })
-                preds = np.argmax(preds, axis=1)
-                
-                # Save predictions
-                if args.do_predict:
-                    dump_predictions(
-                        os.path.join(output_dir, 'predictions.json'),
-                        label_map,
-                        preds,
-                        eval_examples,
-                    )
-
-                # Update results
-                if args.do_eval:
-                    results['eval:loss'] = eval_loss / nb_eval_steps
-                    eval_result = compute_metrics(args.task_name, preds, out_label_ids)
-                    results.update(eval_result)
-
-                # Log
-                if is_main_process():
-                    logger.info("***** Results *****")
-                    eval_acc = results['acc']
-                    eval_loss = results['eval:loss']
-                    train_loss = tr_loss / nb_tr_steps
-                    logger.info(f'train loss: {train_loss}')
-                    logger.info(f'eval loss:  {eval_loss}')
-                    logger.info(f'eval acc:   {eval_acc}')
-                    # for key in sorted(results.keys()):
-                    #     logger.info("  %s = %s", key, str(results[key]))
-                    with open(os.path.join(output_dir, "results.txt"), "w") as writer:
-                        json.dump(results, writer)
-                    dllogger_queries_from_results = {
-                        'exact_match': 'acc',
-                        'F1': 'f1',
-                        'e2e_train_time': 'train:latency',
-                        'training_sequences_per_second': 'train:throughput',
-                        'e2e_inference_time': ('infer:latency(ms):sum', lambda x: x / 1000),
-                        'inference_sequences_per_second': 'infer:throughput(samples/s):avg',
-                    }
-                    for key, query in dllogger_queries_from_results.items():
-                        results_key, convert = (query if isinstance(query, tuple) else
-                                                (query, lambda x: x))
-                        if results_key not in results:
-                            continue
-                        dllogger.log(
-                            step=tuple(),
-                            data={key: convert(results[results_key])},
-                        )
-                
-                # Save history scores
-                if args.do_eval:
-                    eval_acc = results['acc']
-                    eval_loss = results['eval:loss']
-                    train_loss = tr_loss / nb_tr_steps
-
-                    eval_loss_history.append(eval_loss)
-                    eval_acc_history.append(eval_acc)
-
-                    with open(filename_scores, 'a') as f:
-                        f.write(f"{ep}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
-
-            train_loss_history.append(tr_loss / nb_tr_steps)
-
-            # Save model
-            if is_main_process() and not args.skip_checkpoint:
-                model_to_save = model.module if hasattr(model, 'module') else model
-                model_dir = os.path.join(output_dir, 'models')
-                os.makedirs(model_dir, exist_ok=True)
-                model_filename = os.path.join(model_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
-                torch.save(
-                    {"model": model_to_save.state_dict()},
-                    model_filename,
-                )
-                # with open(
-                #         os.path.join(output_dir, modeling.CONFIG_NAME + '_' + str(ep)),
-                #         'w',
-                # ) as f:
-                #     f.write(model_to_save.config.to_json_string())
-
-                # Check if it's best model
-                if args.do_eval:
-                    if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
-                        best_model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
-                        copyfile(model_filename, best_model_filename)
-                        logger.info("New best model saved")
-
-        latency_train = time.perf_counter() - tic_train
-        tr_loss = tr_loss / nb_tr_steps
-        results.update({
-            'global_step':
-                global_step,
-            'train:loss':
-                tr_loss,
-            'train:latency':
-                latency_train,
-            'train:num_samples_per_gpu':
-                nb_tr_examples,
-            'train:num_steps':
-                nb_tr_steps,
-            'train:throughput':
-                get_world_size() * nb_tr_examples / latency_train,
-        })
-
-
-
-    # if args.do_eval and is_main_process():
-    #     eval_examples = processor.get_dev_examples(args.data_dir)
-    #     eval_features, label_map = convert_examples_to_features(
-    #         eval_examples,
-    #         processor.get_labels(),
-    #         args.max_seq_length,
-    #         tokenizer,
-    #     )
-    #     logger.info("***** Running evaluation *****")
-    #     logger.info("  Num examples = %d", len(eval_examples))
-    #     logger.info("  Batch size = %d", args.eval_batch_size)
-    #     eval_data = gen_tensor_dataset(eval_features)
-    #     # Run prediction for full data
-    #     eval_sampler = SequentialSampler(eval_data)
-    #     eval_dataloader = DataLoader(
-    #         eval_data,
-    #         sampler=eval_sampler,
-    #         batch_size=args.eval_batch_size,
-    #     )
-
-    #     model.eval()
-    #     preds = None
-    #     out_label_ids = None
-    #     eval_loss = 0
-    #     nb_eval_steps, nb_eval_examples = 0, 0
-    #     cuda_events = [(torch.cuda.Event(enable_timing=True),
-    #                     torch.cuda.Event(enable_timing=True))
-    #                    for _ in range(len(eval_dataloader))]
-    #     for i, (input_ids, input_mask, segment_ids, label_ids) in tqdm(
-    #             enumerate(eval_dataloader),
-    #             desc="Evaluating",
-    #     ):
-    #         input_ids = input_ids.to(device)
-    #         input_mask = input_mask.to(device)
-    #         segment_ids = segment_ids.to(device)
-    #         label_ids = label_ids.to(device)
-
-    #         with torch.no_grad():
-    #             cuda_events[i][0].record()
-    #             logits = model(input_ids, segment_ids, input_mask)
-    #             cuda_events[i][1].record()
-    #             if args.do_eval:
-    #                 eval_loss += loss_fct(
-    #                     logits.view(-1, num_labels),
-    #                     label_ids.view(-1),
-    #                 ).mean().item()
-
-    #         nb_eval_steps += 1
-    #         nb_eval_examples += input_ids.size(0)
-    #         if preds is None:
-    #             preds = logits.detach().cpu().numpy()
-    #             out_label_ids = label_ids.detach().cpu().numpy()
-    #         else:
-    #             preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-    #             out_label_ids = np.append(
-    #                 out_label_ids,
-    #                 label_ids.detach().cpu().numpy(),
-    #                 axis=0,
-    #             )
-    #     torch.cuda.synchronize()
-    #     eval_latencies = [
-    #         event_start.elapsed_time(event_end)
-    #         for event_start, event_end in cuda_events
-    #     ]
-    #     eval_latencies = list(sorted(eval_latencies))
-
-    #     def infer_latency_sli(threshold):
-    #         index = int(len(eval_latencies) * threshold) - 1
-    #         index = min(max(index, 0), len(eval_latencies) - 1)
-    #         return eval_latencies[index]
-
-    #     eval_throughput = (args.eval_batch_size /
-    #                        (np.mean(eval_latencies) / 1000))
-
-    #     results.update({
-    #         'eval:num_samples_per_gpu': nb_eval_examples,
-    #         'eval:num_steps': nb_eval_steps,
-    #         'infer:latency(ms):50%': infer_latency_sli(0.5),
-    #         'infer:latency(ms):90%': infer_latency_sli(0.9),
-    #         'infer:latency(ms):95%': infer_latency_sli(0.95),
-    #         'infer:latency(ms):99%': infer_latency_sli(0.99),
-    #         'infer:latency(ms):100%': infer_latency_sli(1.0),
-    #         'infer:latency(ms):avg': np.mean(eval_latencies),
-    #         'infer:latency(ms):std': np.std(eval_latencies),
-    #         'infer:latency(ms):sum': np.sum(eval_latencies),
-    #         'infer:throughput(samples/s):avg': eval_throughput,
-    #     })
-    #     preds = np.argmax(preds, axis=1)
-    #     # if args.do_predict:
-    #     #     dump_predictions(
-    #     #         os.path.join(output_dir, 'predictions.json'),
-    #     #         label_map,
-    #     #         preds,
-    #     #         eval_examples,
-    #     #     )
-
-    #     # if args.do_eval:
-    #     results['eval:loss'] = eval_loss / nb_eval_steps
-    #     eval_result = compute_metrics(args.task_name, preds, out_label_ids)
-    #     results.update(eval_result)
-    
-    # Test
-    if args.do_predict and is_main_process():
-        eval_examples = processor.get_test_examples(args.data_dir)
-        eval_features, label_map = convert_examples_to_features(
-            eval_examples,
-            processor.get_labels(),
-            args.max_seq_length,
-            tokenizer,
-        )
-        logger.info("***** Running evaluation *****")
-        logger.info("  Num examples = %d", len(eval_examples))
-        logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_data = gen_tensor_dataset(eval_features)
-        # Run prediction for full data
-        eval_sampler = SequentialSampler(eval_data)
-        eval_dataloader = DataLoader(
-            eval_data,
-            sampler=eval_sampler,
-            batch_size=args.eval_batch_size,
-        )
-
-        model.eval()
-        preds = None
-        out_label_ids = None
-        eval_loss = 0
-        nb_eval_steps, nb_eval_examples = 0, 0
-        cuda_events = [(torch.cuda.Event(enable_timing=True),
-                        torch.cuda.Event(enable_timing=True))
-                       for _ in range(len(eval_dataloader))]
-        for i, (input_ids, input_mask, segment_ids, label_ids) in tqdm(
-                enumerate(eval_dataloader),
-                desc="Evaluating",
-        ):
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
-
-            with torch.no_grad():
-                cuda_events[i][0].record()
-                logits = model(input_ids, segment_ids, input_mask)
-                cuda_events[i][1].record()
-                if args.do_eval:
-                    eval_loss += loss_fct(
-                        logits.view(-1, num_labels),
-                        label_ids.view(-1),
-                    ).mean().item()
-
-            nb_eval_steps += 1
-            nb_eval_examples += input_ids.size(0)
-            if preds is None:
-                preds = logits.detach().cpu().numpy()
-                out_label_ids = label_ids.detach().cpu().numpy()
-            else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(
-                    out_label_ids,
-                    label_ids.detach().cpu().numpy(),
-                    axis=0,
-                )
-        torch.cuda.synchronize()
-        eval_latencies = [
-            event_start.elapsed_time(event_end)
-            for event_start, event_end in cuda_events
-        ]
-        eval_latencies = list(sorted(eval_latencies))
-
-        def infer_latency_sli(threshold):
-            index = int(len(eval_latencies) * threshold) - 1
-            index = min(max(index, 0), len(eval_latencies) - 1)
-            return eval_latencies[index]
-
-        eval_throughput = (args.eval_batch_size /
-                           (np.mean(eval_latencies) / 1000))
-
-        results.update({
-            'eval:num_samples_per_gpu': nb_eval_examples,
-            'eval:num_steps': nb_eval_steps,
-            'infer:latency(ms):50%': infer_latency_sli(0.5),
-            'infer:latency(ms):90%': infer_latency_sli(0.9),
-            'infer:latency(ms):95%': infer_latency_sli(0.95),
-            'infer:latency(ms):99%': infer_latency_sli(0.99),
-            'infer:latency(ms):100%': infer_latency_sli(1.0),
-            'infer:latency(ms):avg': np.mean(eval_latencies),
-            'infer:latency(ms):std': np.std(eval_latencies),
-            'infer:latency(ms):sum': np.sum(eval_latencies),
-            'infer:throughput(samples/s):avg': eval_throughput,
-        })
-        preds = np.argmax(preds, axis=1)
-        # if args.do_predict:
-        #     dump_predictions(
-        #         os.path.join(output_dir, 'predictions.json'),
-        #         label_map,
-        #         preds,
-        #         eval_examples,
-        #     )
-
-        # if args.do_eval:
-        results['eval:loss'] = eval_loss / nb_eval_steps
-        eval_result = compute_metrics(args.task_name, preds, out_label_ids)
-        results.update(eval_result)
-
+    # Save result to file
+    result_file = os.path.join(output_dir, FILENAME_TEST_RESULT)
+    with open(result_file, 'w') as f:
+        f.write(f'test_loss\ttest_acc\n')
+        f.write(f'{eval_loss}\t{eval_acc}\n')
 
     # Log
     if is_main_process():
         logger.info("***** Results *****")
-        for key in sorted(results.keys()):
-            logger.info("  %s = %s", key, str(results[key]))
-        with open(os.path.join(output_dir, "results.txt"), "w") as writer:
-            json.dump(results, writer)
-        dllogger_queries_from_results = {
-            'exact_match': 'acc',
-            'F1': 'f1',
-            'e2e_train_time': 'train:latency',
-            'training_sequences_per_second': 'train:throughput',
-            'e2e_inference_time': ('infer:latency(ms):sum', lambda x: x / 1000),
-            'inference_sequences_per_second': 'infer:throughput(samples/s):avg',
-        }
-        for key, query in dllogger_queries_from_results.items():
-            results_key, convert = (query if isinstance(query, tuple) else
-                                    (query, lambda x: x))
-            if results_key not in results:
-                continue
-            dllogger.log(
-                step=tuple(),
-                data={key: convert(results[results_key])},
-            )
+        logger.info(f'Test loss: {eval_loss}')
+        logger.info(f'Test acc:  {eval_acc}')
+        for key, val in eval_result.items():
+            logger.info(f'{key}: {val}')
 
-    dllogger.flush()
+        # dllogger_queries_from_results = {
+        #     'exact_match': 'acc',
+        #     'F1': 'f1',
+        #     'e2e_train_time': 'train:latency',
+        #     'training_sequences_per_second': 'train:throughput',
+        #     'e2e_inference_time': ('infer:latency(ms):sum', lambda x: x / 1000),
+        #     'inference_sequences_per_second': 'infer:throughput(samples/s):avg',
+        # }
+        # for key, query in dllogger_queries_from_results.items():
+        #     results_key, convert = (query if isinstance(query, tuple) else
+        #                             (query, lambda x: x))
+        #     if results_key not in results:
+        #         continue
+        #     dllogger.log(
+        #         step=tuple(),
+        #         data={key: convert(results[results_key])},
+        #     )
 
-    print('Training finished')
-    return results
+    # dllogger.flush()
+
+    print('Test finished')
+
+
+def main(args):
+    print("main() in run_glue.py")
+    logger.info("Arguments:")
+    logger.info(json.dumps(vars(args), indent=4))
+
+    # Setup output files
+    if args.fewshot == 0:
+        output_dir = os.path.join(args.output_dir, str(args.seed))
+        is_fewshot = False
+    else:
+        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
+        is_fewshot = True
+    os.makedirs(output_dir, exist_ok=True)
+    filename_params = os.path.join(output_dir, 'params.json')
+    json.dump(vars(args), open(filename_params, 'w'), indent=4)
+
+
+    
+    args.fp16 = args.fp16 or args.amp
+    # if args.server_ip and args.server_port:
+    #     # Distant debugging - see
+    #     # https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
+    #     import ptvsd
+    #     logger.info("Waiting for debugger attach")
+    #     ptvsd.enable_attach(
+    #         address=(args.server_ip, args.server_port),
+    #         redirect_output=True,
+    #     )
+    #     ptvsd.wait_for_attach()
+
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device(
+            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        n_gpu = torch.cuda.device_count()
+    else:
+        torch.cuda.set_device(args.local_rank)
+        device = torch.device("cuda", args.local_rank)
+        n_gpu = 1
+        # Initializes the distributed backend which will take care of
+        # sychronizing nodes/GPUs.
+        if not torch.distributed.is_initialized():
+            torch.distributed.init_process_group(backend='nccl')
+    logger.info("device: {} n_gpu: {}, distributed training: {}, "
+                "16-bits training: {}".format(
+                    device,
+                    n_gpu,
+                    bool(args.local_rank != -1),
+                    args.fp16,
+                ))
+
+    if not args.do_train and not args.do_eval and not args.do_test:
+        raise ValueError("At least one of `do_train`, `do_eval` or "
+                         "`do_test` must be True.")
+
+    if is_main_process():
+        if (os.path.exists(output_dir) and os.listdir(output_dir) and
+                args.do_train):
+            logger.warning("Output directory ({}) already exists and is not "
+                           "empty.".format(output_dir))
+    mkdir_by_main_process(output_dir)
+
+    # if is_main_process():
+    #     dllogger.init(backends=[
+    #         dllogger.JSONStreamBackend(
+    #             verbosity=dllogger.Verbosity.VERBOSE,
+    #             filename=os.path.join(output_dir, 'dllogger.json'),
+    #         ),
+    #         dllogger.StdOutBackend(
+    #             verbosity=dllogger.Verbosity.VERBOSE,
+    #             step_format=format_step,
+    #         ),
+    #     ])
+    # else:
+    #     dllogger.init(backends=[])
+
+    # dllogger.log(step="PARAMETER", data={"Config": [str(args)]})
+
+    if args.gradient_accumulation_steps < 1:
+        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, "
+                         "should be >= 1".format(
+                             args.gradient_accumulation_steps))
+    if args.gradient_accumulation_steps > args.train_batch_size:
+        raise ValueError("gradient_accumulation_steps ({}) cannot be larger "
+                         "train_batch_size ({}) - there cannot be a fraction "
+                         "of one sample.".format(
+                             args.gradient_accumulation_steps,
+                             args.train_batch_size,
+                         ))
+    args.train_batch_size = (args.train_batch_size //
+                             args.gradient_accumulation_steps)
+
+    # Set seed
+    logger.info(f'set seed: {args.seed}')
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if n_gpu > 0:
+        torch.cuda.manual_seed_all(args.seed)
+   
+    # get_tokenization_result()
+
+    if args.do_train:
+        train(args)
+    if args.do_test:
+        test(args)
+    print('DONE')
 
 
 if __name__ == "__main__":
     print("run_glue.py")
+    get_tokenization_result(parse_args())
     main(parse_args())

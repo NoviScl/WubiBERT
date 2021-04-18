@@ -125,7 +125,7 @@ def evaluate(
     return float(tmp_result['EM']), float(tmp_result['F1'])
 
 
-if __name__ == '__main__':
+def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument('--gpu_ids', type=str, default='0,1,2,3')
 
@@ -168,12 +168,14 @@ if __name__ == '__main__':
     parser.add_argument('--init_checkpoint', type=str, required=True)
     parser.add_argument('--config_file', type=str, required=True)
     parser.add_argument('--out_dir', type=str, default='logs/temp')
-    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
-
-    # use some global vars for convenience
-    args = parser.parse_args()
+    parser.add_argument("--do_train", action='store_true', default=False, help="Whether to run training.")
+    parser.add_argument('--do_test', action='store_true', default=False, help='Whether to test.')
     
+    return parser.parse_args()
 
+
+def train(args):
+    # Determine task: DRCD or CMRC
     if args.task_name.lower() == 'drcd':
         from preprocess.DRCD_output import write_predictions
         from preprocess.DRCD_preprocess import json2features
@@ -184,14 +186,15 @@ if __name__ == '__main__':
         raise NotImplementedError
 
     # Prepare files
-    output_dir = args.out_dir + '/' + str(args.seed)
+    output_dir = os.path.join(args.out_dir, str(args.seed))
     filename_scores = os.path.join(output_dir, 'scores.txt')
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
     filename_params = os.path.join(output_dir, 'params.json')
-    json.dump(vars(args), open(filename_params, 'w'), indent=4))  # Save arguments
+    json.dump(vars(args), open(filename_params, 'w'), indent=4)  # Save arguments
 
-
+    # Because tokenizer_type is a part of the feature file name,
+    # new features will be generated for every tokenizer type.
     feature_file_suffix = 'features_' + str(args.max_seq_length) + '_' + args.tokenizer_type + '.json'
     example_file_suffix = 'examples_' + str(args.max_seq_length) + '_' + args.tokenizer_type + '.json'
     args.train_dir = args.train_dir.replace('features.json', feature_file_suffix)
@@ -224,25 +227,17 @@ if __name__ == '__main__':
     # Tokenizer
     logger.info('Loading tokenizer...')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
-    assert args.vocab_size == len(tokenizer.vocab)
-
-
-    # Prepare model
-    config = modeling.BertConfig.from_json_file(args.config_file)
-    # Padding for divisibility by 8
-    if config.vocab_size % 8 != 0:
-        config.vocab_size += 8 - (config.vocab_size % 8)
+    # assert args.vocab_size == len(tokenizer.vocab)
 
     # Load data
     logger.info('Loading data and features...')
-    # Generate new features every time, because tokenizer is changed.
-    # if True:
-    if not os.path.exists(args.train_dir):
+    if True:
+    # if not os.path.exists(args.train_dir):
         json2features(args.train_file, [args.train_dir.replace('_features_', '_examples_'), args.train_dir],
                       tokenizer, is_training=True,
                       max_seq_length=args.max_seq_length)
-    # if True:
-    if not os.path.exists(args.dev_dir1) or not os.path.exists(args.dev_dir2):
+    if True:
+    # if not os.path.exists(args.dev_dir1) or not os.path.exists(args.dev_dir2):
         json2features(args.dev_file, [args.dev_dir1, args.dev_dir2], tokenizer, is_training=False,
                       max_seq_length=args.max_seq_length)
 
@@ -250,10 +245,13 @@ if __name__ == '__main__':
     dev_examples = json.load(open(args.dev_dir1, 'r'))
     dev_features = json.load(open(args.dev_dir2, 'r'))
 
-    # TODO: remove
+
+    # TODO: for debugging, remove in the end
+    # print(train_features[0])
     # train_features = train_features[:10]
     # dev_examples = dev_examples[:10]
     # dev_features = dev_features[:10]
+    # exit(0)
 
     steps_per_epoch = len(train_features) // args.train_batch_size
     eval_steps = int(steps_per_epoch * args.eval_epochs)
@@ -271,26 +269,24 @@ if __name__ == '__main__':
     F1s = []
     EMs = []
     # 存一个全局最优的模型
-    best_f1_em = 0
+    # best_f1_em = 0
+    # best_f1, best_em = 0, 0
 
-    best_f1, best_em = 0, 0
+    # Set seed
     logger.info('SEED: ' + str(args.seed))
-
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-    # init model
+    # Prepare model
+    config = modeling.BertConfig.from_json_file(args.config_file)
+    # Padding for divisibility by 8
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+
     # print('init model...')
-    # if 'albert' not in args.init_restore_dir:
-    #     model = BertForQuestionAnswering(bert_config)
-    # else:
-    #     if 'google' in args.init_restore_dir:
-    #         model = AlbertForMRC(bert_config)
-    #     else:
-    #         model = ALBertForQA(bert_config, dropout_rate=args.dropout)
     # utils.torch_show_all_params(model)
     # utils.torch_init_model(model, args.init_restore_dir)
     logger.info("USING CHECKPOINT from {}".format(args.init_checkpoint))
@@ -329,6 +325,8 @@ if __name__ == '__main__':
         max_grad_norm=args.clip_norm,
         weight_decay_rate=args.weight_decay_rate)
 
+
+    # Decode features
     all_input_ids = torch.tensor([f['input_ids'] for f in train_features], dtype=torch.long)
     all_input_mask = torch.tensor([f['input_mask'] for f in train_features], dtype=torch.long)
     all_segment_ids = torch.tensor([f['segment_ids'] for f in train_features], dtype=torch.long)
@@ -340,6 +338,8 @@ if __name__ == '__main__':
     # true label
     all_start_positions = torch.tensor([f['start_position'] for f in train_features], dtype=torch.long)
     all_end_positions = torch.tensor([f['end_position'] for f in train_features], dtype=torch.long)
+
+    # Train and evaluation
     if args.do_train:
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
                                    all_start_positions, all_end_positions)
@@ -418,26 +418,29 @@ if __name__ == '__main__':
                 model, args, dev_examples, dev_features, 
                 device, ep, output_dir
             )
-            dev_acc_history.append(dev_acc / 100)
-            dev_f1_history.append(dev_f1 / 100)
+
+            dev_acc /= 100
+            dev_f1 /= 100
+
+            dev_acc_history.append(dev_acc)
+            dev_f1_history.append(dev_f1)
 
             train_loss = total_loss / steps_per_epoch
             
             with open(filename_scores, 'a') as f:
-                vals = list(map(str, [ep, train_loss, dev_acc]))
-                f.write('\t'.join(vals))
-                f.write('\n')
+                f.write(f'{ep}\t{train_loss}\t{dev_acc}\n')
 
             # Save model
             model_to_save = model.module if hasattr(model, 'module') else model
-            model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
+            dir_models = os.path.join(output_dir, 'models')
+            model_filename = os.path.join(dir_models, 'model_epoch_' + str(ep) + '.bin')
             torch.save(
                 {"model": model_to_save.state_dict()},
                 model_filename,
             )
             # Save best model
             if len(dev_acc_history) == 0 or dev_acc_history[-1] == max(dev_acc_history):
-                best_model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
+                best_model_filename = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
                 copyfile(model_filename, best_model_filename)
                 logger.info('New best model saved')
 
@@ -461,3 +464,18 @@ if __name__ == '__main__':
     del optimizer
     torch.cuda.empty_cache()
 
+    print('Training finished')
+    
+
+def test(args):
+    raise NotImplementedError
+
+
+def main():
+    args = parse_args()
+    train(args)
+    print('DONE')
+
+
+if __name__ == '__main__':
+    main()

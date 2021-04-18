@@ -56,6 +56,9 @@ CONFIG_NAME = 'bert_config.json'
 WEIGHTS_NAME = 'pytorch_model.bin'
 TF_WEIGHTS_NAME = 'model.ckpt'
 
+FILENAME_BEST_MODEL = 'best_model.bin'
+FILENAME_CONFIG = 'bert_config.json'
+
 def load_tf_weights_in_bert(model, tf_checkpoint_path):
     """ Load tf checkpoints in a pytorch model
     """

@@ -47,9 +47,9 @@ from mrc.tools import utils
 # from tools.pytorch_optimization import get_optimization, warmup_linear
 
 # Contants for C3
-num_choices = 4  # 数据集里不一定有四个选项，但是会手动加 “无效答案” 至 4 个。
-reverse_order = False
-sa_step = False
+NUM_CHOICES = 4  # 数据集里不一定有四个选项，但是会手动加 “无效答案” 至4个
+REVERSE_ORDER = False
+SA_STEP = False
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -129,17 +129,16 @@ class c3Processor(DataProcessor):
         self.D = [[], [], []]
         self.data_dir = data_dir
 
-        # for sid in range(3):
-        for sid in range(2):
+        for sid in range(3):
+        # for sid in range(2):
             data = []
             for subtask in ["d", "m"]:
-                # files = ["train.json", "dev.json", "test.json"]
-                files = ['train.json', 'dev.json']
-                with open(self.data_dir + "/" + subtask + "-" + files[sid],
-                          "r", encoding="utf8") as f:
+                files = ["train.json", "dev.json", "test.json"]
+                # files = ['train.json', 'dev.json']
+                filename = self.data_dir + "/" + subtask + "-" + files[sid]
+                with open(filename, "r", encoding="utf8") as f:
                     data += json.load(f)
-            print(f'Loaded {len(data)} examples from file')
-            # data = data[:30]
+            print(f'Loaded {len(data)} examples from "{filename}"')
             if sid == 0:
                 random.shuffle(data)
             for i in range(len(data)):
@@ -171,8 +170,8 @@ class c3Processor(DataProcessor):
     def _create_examples(self, data, set_type):
         """Creates examples for the training and dev sets."""
         cache_dir = os.path.join(self.data_dir, set_type + '_examples.pkl')
-        # if os.path.exists(cache_dir):
-        if False:
+        if os.path.exists(cache_dir):
+        # if False:
             examples = pickle.load(open(cache_dir, 'rb'))
         else:
             examples = []
@@ -201,7 +200,7 @@ class c3Processor(DataProcessor):
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
 
-    print("#examples", len(examples))
+    # print("#examples", len(examples))
 
     label_map = {}
     for (i, label) in enumerate(label_list):
@@ -269,12 +268,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
                 input_mask=input_mask,
                 segment_ids=segment_ids,
                 label_id=label_id))
-        if len(features[-1]) == num_choices:
+        if len(features[-1]) == NUM_CHOICES:
             features.append([])
 
     if len(features[-1]) == 0:
         features = features[:-1]
-    print('#features', len(features))
+    # print('#features', len(features))
     return features
 
 
@@ -350,6 +349,10 @@ def parse_args():
                         default=False,
                         action='store_true',
                         help="Whether to run eval on the dev set.")
+    parser.add_argument('--do_test', 
+                        default=False, 
+                        action='store_true', 
+                        help='Whether to test model on test set (will load model from "best_model.bin")')
     parser.add_argument("--train_batch_size",
                         default=16,
                         type=int,
@@ -398,13 +401,45 @@ def parse_args():
                         type=int,
                         default=1,
                         help="Number of updates steps to accumualte before performing a backward/update pass.")
-    parser.add_argument('--setting_file', type=str, default='setting.txt')
+    # parser.add_argument('--setting_file', type=str, default='setting.txt')
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def get_features(
+    examples, 
+    data_type, 
+    data_dir, 
+    max_seq_length,
+    tokenizer,
+    label_list):
 
+    if data_type == 'eval':
+        data_type = 'dev'
+
+    if data_type not in ['train', 'dev', 'test']:
+        raise ValueError(f'Expected "train", "dev" or "test", but got {data_type}')
+    
+    tokenizer_to_type = {v: k for k, v in ALL_TOKENIZERS.items()}
+    tokenizer_type = tokenizer_to_type[type(tokenizer)]
+
+    file_feature = '{}_features_{}_{}.pkl'.format(data_type, max_seq_length, tokenizer_type)
+    # feature_dir = os.path.join(data_dir, data_type + '_features_{}.pkl'.format(max_seq_length))
+    if os.path.exists(file_feature):
+    # if False:
+        logger.info(f'Loading features from "{file_feature}"...')
+        features = pickle.load(open(file_feature, 'rb'))
+        logger.info(f'Loading {len(file_feature)} features.')
+    else:
+        logger.info(f'Converting {len(examples)} examples into features...')
+        features = convert_examples_to_features(examples, label_list, max_seq_length, tokenizer)
+        with open(file_feature, 'wb') as w:
+            pickle.dump(features, w)
+        logger.info(f'Saved {len(features)} features to "{file_feature}".')
+    return features
+
+
+
+def train(args):
     # Output files
     output_dir = os.path.join(args.output_dir, str(args.seed))
     os.makedirs(output_dir, exist_ok=True)
@@ -434,21 +469,24 @@ def main():
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
     # Set seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+    # random.seed(args.seed)
+    # np.random.seed(args.seed)
+    # torch.manual_seed(args.seed)
+    # if n_gpu > 0:
+    #     torch.cuda.manual_seed_all(args.seed)
 
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
 
+
+    # Processor
     logger.info('Loading processor...')
     processor = c3Processor(args.data_dir)
     label_list = processor.get_labels()
 
-    # tokenizer = tokenization.BertTokenizer(vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
+    # Tokenizer
     logger.info('Loading tokenizer...')
+    logger.info(f'vocab file={args.vocab_file}, vocab_model_file={args.vocab_model_file}')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     
     # Load training data
@@ -457,75 +495,75 @@ def main():
     num_train_steps = None
     if args.do_train:
         train_examples = processor.get_train_examples()
-        num_train_steps = int(len(train_examples) / num_choices / args.train_batch_size /
+        num_train_steps = int(len(train_examples) / NUM_CHOICES / args.train_batch_size /
                               args.gradient_accumulation_steps * args.num_train_epochs)
 
-    # Model
-    device = 'cpu'
-    logger.info('Preparing model from checkpoint "{}"...'.format(args.init_checkpoint))
+    # Prepare Model
+    # device = 'cpu'
+    logger.info('Loading model from checkpoint "{}"...'.format(args.init_checkpoint))
     config = modeling.BertConfig.from_json_file(args.config_file)
     # Padding for divisibility by 8
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
 
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-
-    model = modeling.BertForMultipleChoice(config, num_choices)
+    model = modeling.BertForMultipleChoice(config, NUM_CHOICES)
     state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
     # print(state_dict['bert.embeddings.word_embeddings.weight'].shape)
     # print(model.state_dict()['bert.embeddings.word_embeddings.weight'].shape)
-    model.load_state_dict(state_dict, strict=False,)
+    model.load_state_dict(state_dict, strict=False)
+    model.to(device)
+
+    if args.max_seq_length > config.max_position_embeddings:
+        raise ValueError(
+            "Cannot use sequence length {} because the BERT model was only trained up to sequence length {}".format(
+                args.max_seq_length, config.max_position_embeddings))
+    if args.float16:
+        model.half()
+    if args.local_rank != -1:
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, 
+            device_ids=[args.local_rank],
+            output_device=args.local_rank)
+    elif n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
+    # Save config file
+    # if args.init_checkpoint is not None:
+    #     utils.torch_show_all_params(model)
+    #     utils.torch_init_model(model, args.init_checkpoint)
     # print(model.config)
     # print("DONE")
     # exit(0)
     # if 'albert' in args.bert_config_file:
     #     if 'google' in args.bert_config_file:
     #         bert_config = AlbertConfig.from_json_file(args.bert_config_file)
-    #         model = AlbertForMultipleChoice(bert_config, num_choices=num_choices)
+    #         model = AlbertForMultipleChoice(bert_config, NUM_CHOICES=NUM_CHOICES)
     #     else:
     #         bert_config = ALBertConfig.from_json_file(args.bert_config_file)
-    #         model = ALBertForMultipleChoice(bert_config, num_choices=num_choices)
+    #         model = ALBertForMultipleChoice(bert_config, NUM_CHOICES=NUM_CHOICES)
     # else:
     #     bert_config = BertConfig.from_json_file(args.bert_config_file)
-    #     model = BertForMultipleChoice(bert_config, num_choices=num_choices)
+    #     model = BertForMultipleChoice(bert_config, NUM_CHOICES=NUM_CHOICES)
 
-    if args.max_seq_length > config.max_position_embeddings:
-        raise ValueError(
-            "Cannot use sequence length {} because the BERT model was only trained up to sequence length {}".format(
-                args.max_seq_length, config.max_position_embeddings))
-
-    # if args.init_checkpoint is not None:
-    #     utils.torch_show_all_params(model)
-    #     utils.torch_init_model(model, args.init_checkpoint)
-    if args.float16:
-        model.half()
-    
-    model.to(device)
-
-    if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
-                                                          output_device=args.local_rank)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
-    # Save config file
     logger.info('Saving config file...')
     model_to_save = model.module if hasattr(model, 'module') else model
-    filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
+    filename_config = os.path.join(output_dir, modeling.FILENAME_CONFIG)
     with open(filename_config, 'w') as f:
         f.write(model_to_save.config.to_json_string())
 
 
     # Optimizer
-    optimizer = get_optimizer(model=model,
-                              float16=args.float16,
-                              learning_rate=args.learning_rate,
-                              total_steps=num_train_steps,
-                              schedule=args.schedule,
-                              warmup_rate=args.warmup_proportion,
-                              max_grad_norm=args.clip_norm,
-                              weight_decay_rate=args.weight_decay_rate,
-                              opt_pooler=True)  # multi_choice must update pooler
+    optimizer = get_optimizer(
+        model=model,
+        float16=args.float16,
+        learning_rate=args.learning_rate,
+        total_steps=num_train_steps,
+        schedule=args.schedule,
+        warmup_rate=args.warmup_proportion,
+        max_grad_norm=args.clip_norm,
+        weight_decay_rate=args.weight_decay_rate,
+        opt_pooler=True)  # multi_choice must update pooler
 
     global_step = 0
 
@@ -534,16 +572,30 @@ def main():
     if args.do_eval:
         logger.info('Loading eval data...')
         eval_examples = processor.get_dev_examples()
-        feature_file = f'dev_features_{args.max_seq_length}_{args.tokenizer_type}.pkl'
-        feature_dir = os.path.join(args.data_dir, feature_file)
-        if os.path.exists(feature_dir):
-            eval_features = pickle.load(open(feature_dir, 'rb'))
-        else:
-            eval_features = convert_examples_to_features(eval_examples, label_list, args.max_seq_length, tokenizer)
-            with open(feature_dir, 'wb') as w:
-                pickle.dump(eval_features, w)
+        eval_features = get_features(
+            eval_examples, 
+            'eval', 
+            args.data_dir, 
+            args.max_seq_length,
+            tokenizer,
+            label_list)
+        # feature_file = f'dev_features_{args.max_seq_length}_{args.tokenizer_type}.pkl'
+        # feature_dir = os.path.join(args.data_dir, feature_file)
 
-        eval_features = eval_features[:10]
+        # logger.info('Loading (or generating) eval features...')
+        # if os.path.exists(feature_dir):
+        #     logger.info(f'Loading features from "{feature_dir}"...')
+        #     eval_features = pickle.load(open(feature_dir, 'rb'))
+        #     logger.info(f'Loaded {len(eval_features)} features.')
+        # else:
+        #     logger.info(f'Converting {len(eval_examples)} examples to features')
+        #     eval_features = convert_examples_to_features(eval_examples, label_list, args.max_seq_length, tokenizer)
+        #     with open(feature_dir, 'wb') as w:
+        #         pickle.dump(eval_features, w)
+        #     logger.info(f'Saved {len(eval_examples)} features to "{feature_dir}".')
+
+        # TODO: remove (for debugging only)
+        # eval_features = eval_features[:100]
 
         input_ids = []
         input_mask = []
@@ -554,7 +606,7 @@ def main():
             input_ids.append([])
             input_mask.append([])
             segment_ids.append([])
-            for i in range(num_choices):
+            for i in range(NUM_CHOICES):
                 input_ids[-1].append(f[i].input_ids)
                 input_mask[-1].append(f[i].input_mask)
                 segment_ids[-1].append(f[i].segment_ids)
@@ -575,15 +627,27 @@ def main():
     if args.do_train:
         best_accuracy = 0
 
-        feature_dir = os.path.join(args.data_dir, 'train_features{}.pkl'.format(args.max_seq_length))
-        if os.path.exists(feature_dir):
-            train_features = pickle.load(open(feature_dir, 'rb'))
-        else:
-            train_features = convert_examples_to_features(train_examples, label_list, args.max_seq_length, tokenizer)
-            with open(feature_dir, 'wb') as w:
-                pickle.dump(train_features, w)
-
-        # train_features = train_features[:10]
+        # feature_dir = os.path.join(args.data_dir, 'train_features{}.pkl'.format(args.max_seq_length))
+        # if os.path.exists(feature_dir):
+        # # if False:
+        #     logger.info(f'Loading train features from "{feature_dir}"...')
+        #     train_features = pickle.load(open(feature_dir, 'rb'))
+        #     logger.info(f'Loading {len(train_features)} train features.')
+        # else:
+        #     logger.info(f'Converting {len(train_examples)} into features...')
+        #     train_features = convert_examples_to_features(train_examples, label_list, args.max_seq_length, tokenizer)
+        #     with open(feature_dir, 'wb') as w:
+        #         pickle.dump(train_features, w)
+        #     logger.info(f'Saved {len(train_features)} features to "{feature_dir}".')
+        train_features = get_features(
+            train_examples, 
+            'train', 
+            args.data_dir,
+            args.max_seq_length,
+            tokenizer,
+            label_list)
+        # TODO: remove (for debugging only)
+        # train_features = train_features[:600]
 
         logger.info("***** Running training *****")
         logger.info('  Num epochs = %d', args.num_train_epochs)
@@ -592,6 +656,7 @@ def main():
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_steps)
 
+        # Process features
         input_ids = []
         input_mask = []
         segment_ids = []
@@ -600,7 +665,7 @@ def main():
             input_ids.append([])
             input_mask.append([])
             segment_ids.append([])
-            for i in range(num_choices):
+            for i in range(NUM_CHOICES):
                 input_ids[-1].append(f[i].input_ids)
                 input_mask[-1].append(f[i].input_mask)
                 segment_ids[-1].append(f[i].segment_ids)
@@ -632,6 +697,14 @@ def main():
                 for step, batch in enumerate(train_dataloader):
                     batch = tuple(t.to(device) for t in batch)
                     input_ids, input_mask, segment_ids, label_ids = batch
+
+                    if step == 0:
+                        print('input_ids')
+                        print(input_ids)
+                        print('label_ids')
+                        print(label_ids)
+
+
                     # try:
                     loss = model(input_ids, segment_ids, input_mask, label_ids)
                     # except:
@@ -666,7 +739,14 @@ def main():
                         pbar.set_postfix({'loss': '{0:1.5f}'.format(total_train_loss / (nb_tr_steps + 1e-5))})
                         pbar.update(1)
 
+            # Evaluation
             if args.do_eval:
+
+                logger.info("***** Running Evaluation *****")
+                logger.info("  Num examples = %d", len(eval_examples))
+                logger.info('  Num features = %d', len(eval_features))
+                logger.info("  Batch size = %d", args.eval_batch_size)
+
                 model.eval()
                 eval_loss, eval_acc = 0, 0
                 nb_eval_steps, nb_eval_examples = 0, 0
@@ -706,7 +786,7 @@ def main():
                     result = {'eval_loss': eval_loss,
                               'eval_acc': eval_acc,
                               'global_step': global_step,
-                              'loss': train_loss}
+                              'train_loss': train_loss}
                 else:
                     result = {'eval_loss': eval_loss,
                               'eval_acc': eval_acc}
@@ -714,6 +794,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key in sorted(result.keys()):
                     logger.info("  %s = %s", key, str(result[key]))
+                logger.info(f'  Epoch = {ep}')
 
                 # Save result of this epoch
                 with open(filename_scores, 'a') as f:
@@ -730,168 +811,240 @@ def main():
             # Save model
             if is_main_process():
                 model_to_save = model.module if hasattr(model, 'module') else model
-                model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
-                torch.save(model_to_save.state_dict(), model_filename)
-
+                dir_model = os.path.join(output_dir, 'models')
+                os.makedirs(dir_model, exist_ok=True)
+                filename_model = os.path.join(dir_model, 'model_epoch_' + str(ep) + '.bin')
+                # filename_model = os.path.join(output_dir, 'model_epoch_' + str(ep) + '.bin')
+                torch.save(
+                    {"model": model_to_save.state_dict()},
+                    filename_model,
+                )
+                
                 if args.do_eval:
                     if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
-                        best_model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
-                        copyfile(model_filename, best_model_filename)
+                        filename_best_model = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
+                        copyfile(filename_model, filename_best_model)
                         logger.info('New best model saved')
 
         # model.load_state_dict(torch.load(os.path.join(args.output_dir, "model_best.pt")))
         # torch.save(model.state_dict(), os.path.join(args.output_dir, "model.pt"))
+    print('Training finished')
+
+
+def test(args):
+    # Output files
+    output_dir = os.path.join(args.output_dir, str(args.seed))
+    os.makedirs(output_dir, exist_ok=True)
+
+    # filename_scores = os.path.join(output_dir, 'scores.txt')
+    # filename_params = os.path.join(output_dir, 'params.json')
+    logger.info(json.dumps(vars(args), indent=4))
+    # json.dump(vars(args), open(filename_params, 'w'), indent=4)
+    # with open(filename_scores, 'w') as f:
+
+
+    # Setup cuda
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        n_gpu = torch.cuda.device_count()
+    else:
+        device = torch.device("cuda", args.local_rank)
+        n_gpu = 1
+        # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+        torch.distributed.init_process_group(backend='nccl')
+    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+
+    if args.gradient_accumulation_steps < 1:
+        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
+            args.gradient_accumulation_steps))
+
+    batch_size = args.eval_batch_size
+
+
+    # Tokenizer and processor
+    logger.info('Loading processor...')
+    processor = c3Processor(args.data_dir)
+    label_list = processor.get_labels()
+    logger.info('Loading tokenizer...')
+    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     
-    best_model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
-    model.load_state_dict(torch.load(best_model_filename))
 
-    if args.do_eval:
-        logger.info("***** Running evaluation *****")
-        logger.info("  Num examples = %d", len(eval_examples))
-        logger.info("  Batch size = %d", args.eval_batch_size)
+    # Load test data
+    logger.info('Loading test data...')
+    test_examples = processor.get_test_examples()
+    num_examples = len(test_examples)
+    num_steps = int(num_examples / NUM_CHOICES / batch_size)
 
-        model.eval()
-        eval_loss, eval_acc = 0, 0
-        nb_eval_steps, nb_eval_examples = 0, 0
-        logits_all = []
-        for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader):
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
+    # Load model
+    # filename_best_model = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
+    filename_best_model = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
+    filename_config = os.path.join(output_dir, modeling.FILENAME_CONFIG)
 
-            with torch.no_grad():
-                tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids, return_logits=True)
+    logger.info('Loading model from "{}"...'.format(filename_best_model))
+    config = modeling.BertConfig.from_json_file(filename_config)
+    # Padding for divisibility by 8
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+    model = modeling.BertForMultipleChoice(config, NUM_CHOICES)
+    state_dict = torch.load(filename_best_model, map_location='cpu')['model']
+    model.load_state_dict(state_dict, strict=False)
+    
+    # for i in range(len(logits_all)):
+    #     for j in range(len(logits_all[i])):
+    #         f.write(str(logits_all[i][j]))
+    #         if j == len(logits_all[i]) - 1:
+    #             f.write("\n")
+    #         else:
+    #             f.write(" ")
 
-            logits = logits.detach().cpu().numpy()
-            label_ids = label_ids.cpu().numpy()
-            for i in range(len(logits)):
-                logits_all += [logits[i]]
+    if args.max_seq_length > config.max_position_embeddings:
+        raise ValueError(
+            "Cannot use sequence length {} because the BERT model was only trained up to sequence length {}".format(
+                args.max_seq_length, config.max_position_embeddings))
+    if args.float16:
+        model.half()
+    model.to(device)
 
-            tmp_eval_acc = accuracy(logits, label_ids.reshape(-1))
+    logger.info('Loading test data...')
+    test_examples = processor.get_test_examples()
+    test_features = get_features(
+        test_examples, 
+        'test', 
+        args.data_dir, 
+        args.max_seq_length, 
+        tokenizer,
+        label_list)
+    # feature_file = f'test_features_{args.max_seq_length}_{args.tokenizer_type}.pkl'
+    # feature_dir = os.path.join(args.data_dir, feature_file)
+    # if os.path.exists(feature_dir):
+    #     test_features = pickle.load(open(feature_dir, 'rb'))
+    # else:
+    #     test_features = convert_examples_to_features(test_examples, label_list, args.max_seq_length, tokenizer)
+    #     with open(feature_dir, 'wb') as w:
+    #         pickle.dump(test_features, w)
 
-            eval_loss += tmp_eval_loss.mean().item()
-            eval_acc += tmp_eval_acc
+    # TODO: remove (for debugging only)
+    # test_features = test_features[:100]
 
-            nb_eval_examples += input_ids.size(0)
-            nb_eval_steps += 1
+    logger.info("***** Running testing *****")
+    logger.info(f'  Num examples = {len(test_examples)}')
+    logger.info(f'  Num features = {len(test_features)}')
+    logger.info(f"  Batch size   = {args.eval_batch_size}")
 
-        eval_loss = eval_loss / (nb_eval_steps + 1e-5)
-        eval_acc = eval_acc / (nb_eval_examples + 1e-5)
+    input_ids = []
+    input_mask = []
+    segment_ids = []
+    label_id = []
 
-        result = {'eval_loss': eval_loss,
-                  'eval_acc': eval_acc}
+    for f in test_features:
+        input_ids.append([])
+        input_mask.append([])
+        segment_ids.append([])
+        for i in range(NUM_CHOICES):
+            input_ids[-1].append(f[i].input_ids)
+            input_mask[-1].append(f[i].input_mask)
+            segment_ids[-1].append(f[i].segment_ids)
+        label_id.append(f[0].label_id)
 
-        output_eval_file = os.path.join(output_dir, "results_dev.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
-        output_eval_file = os.path.join(output_dir, "logits_dev.txt")
-        with open(output_eval_file, "w") as f:
-            for i in range(len(logits_all)):
-                for j in range(len(logits_all[i])):
-                    f.write(str(logits_all[i][j]))
-                    if j == len(logits_all[i]) - 1:
-                        f.write("\n")
-                    else:
-                        f.write(" ")
+    all_input_ids = torch.tensor(input_ids, dtype=torch.long)
+    all_input_mask = torch.tensor(input_mask, dtype=torch.long)
+    all_segment_ids = torch.tensor(segment_ids, dtype=torch.long)
+    all_label_ids = torch.tensor(label_id, dtype=torch.long)
 
-        test_examples = processor.get_test_examples()
-        feature_file = f'test_features_{args.max_seq_length}_{args.tokenizer_type}.pkl'
-        feature_dir = os.path.join(args.data_dir, feature_file)
-        if os.path.exists(feature_dir):
-            test_features = pickle.load(open(feature_dir, 'rb'))
-        else:
-            test_features = convert_examples_to_features(test_examples, label_list, args.max_seq_length, tokenizer)
-            with open(feature_dir, 'wb') as w:
-                pickle.dump(test_features, w)
+    test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    if args.local_rank == -1:
+        test_sampler = SequentialSampler(test_data)
+    else:
+        test_sampler = DistributedSampler(test_data)
+    test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
 
-        logger.info("***** Running testing *****")
-        logger.info("  Num examples = %d", len(test_examples))
-        logger.info("  Batch size = %d", args.eval_batch_size)
+    model.eval()
+    test_loss, test_accuracy = 0, 0
+    nb_test_steps, nb_test_examples = 0, 0
+    logits_all = []
+    for input_ids, input_mask, segment_ids, label_ids in tqdm(test_dataloader):
+        input_ids = input_ids.to(device)
+        input_mask = input_mask.to(device)
+        segment_ids = segment_ids.to(device)
+        label_ids = label_ids.to(device)
 
-        input_ids = []
-        input_mask = []
-        segment_ids = []
-        label_id = []
+        with torch.no_grad():
+            tmp_test_loss, logits = model(input_ids, segment_ids, input_mask, label_ids, return_logits=True)
 
-        for f in test_features:
-            input_ids.append([])
-            input_mask.append([])
-            segment_ids.append([])
-            for i in range(num_choices):
-                input_ids[-1].append(f[i].input_ids)
-                input_mask[-1].append(f[i].input_mask)
-                segment_ids[-1].append(f[i].segment_ids)
-            label_id.append(f[0].label_id)
+        logits = logits.detach().cpu().numpy()
+        label_ids = label_ids.to('cpu').numpy()
+        for i in range(len(logits)):
+            logits_all += [logits[i]]
 
-        all_input_ids = torch.tensor(input_ids, dtype=torch.long)
-        all_input_mask = torch.tensor(input_mask, dtype=torch.long)
-        all_segment_ids = torch.tensor(segment_ids, dtype=torch.long)
-        all_label_ids = torch.tensor(label_id, dtype=torch.long)
+        # print('logits_all')
+        # print(logits_all)
 
-        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        if args.local_rank == -1:
-            test_sampler = SequentialSampler(test_data)
-        else:
-            test_sampler = DistributedSampler(test_data)
-        test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
 
-        model.eval()
-        test_loss, test_accuracy = 0, 0
-        nb_test_steps, nb_test_examples = 0, 0
-        logits_all = []
-        for input_ids, input_mask, segment_ids, label_ids in tqdm(test_dataloader):
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
+        tmp_test_accuracy = accuracy(logits, label_ids.reshape(-1))
 
-            with torch.no_grad():
-                tmp_test_loss, logits = model(input_ids, segment_ids, input_mask, label_ids, return_logits=True)
+        test_loss += tmp_test_loss.mean().item()
+        test_accuracy += tmp_test_accuracy
 
-            logits = logits.detach().cpu().numpy()
-            label_ids = label_ids.to('cpu').numpy()
-            for i in range(len(logits)):
-                logits_all += [logits[i]]
+        nb_test_examples += input_ids.size(0)
+        nb_test_steps += 1
 
-            tmp_test_accuracy = accuracy(logits, label_ids.reshape(-1))
+    test_loss = test_loss / (nb_test_steps + 1e-5)
+    test_accuracy = test_accuracy / (nb_test_examples + 1e-5)
 
-            test_loss += tmp_test_loss.mean().item()
-            test_accuracy += tmp_test_accuracy
+    result = {
+        'test_loss': test_loss,
+        'test_accuracy': test_accuracy}
 
-            nb_test_examples += input_ids.size(0)
-            nb_test_steps += 1
+    output_test_file = os.path.join(output_dir, "results_test.txt")
+    with open(output_test_file, "w") as writer:
+        logger.info("***** Test results *****")
+        for key in sorted(result.keys()):
+            logger.info("  %s = %s", key, str(result[key]))
+            writer.write("%s = %s\n" % (key, str(result[key])))
+    output_test_file = os.path.join(output_dir, "logits_test.txt")
 
-        test_loss = test_loss / (nb_test_steps + 1e-5)
-        test_accuracy = test_accuracy / (nb_test_examples + 1e-5)
+    # print('len(logits_all)')
+    # print(len(logits_all))
 
-        result = {'test_loss': test_loss,
-                  'test_accuracy': test_accuracy}
+    print('saving to logits_test.txt')
+    with open(output_test_file, "w") as f:
+        for i in range(len(logits_all)):
+            for j in range(len(logits_all[i])):
+                f.write(str(logits_all[i][j]))
+                if j == len(logits_all[i]) - 1:
+                    f.write("\n")
+                else:
+                    f.write(" ")
 
-        output_test_file = os.path.join(output_dir, "results_test.txt")
-        with open(output_test_file, "w") as writer:
-            logger.info("***** Test results *****")
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
-        output_test_file = os.path.join(output_dir, "logits_test.txt")
-        with open(output_test_file, "w") as f:
-            for i in range(len(logits_all)):
-                for j in range(len(logits_all[i])):
-                    f.write(str(logits_all[i][j]))
-                    if j == len(logits_all[i]) - 1:
-                        f.write("\n")
-                    else:
-                        f.write(" ")
-
-        # the test submission order can't be changed
-        submission_test = os.path.join(output_dir, "submission_test.json")
-        test_preds = [int(np.argmax(logits_)) for logits_ in logits_all]
-        with open(submission_test, "w") as f:
+    logger.info('Saving predictions to submission_test.json')
+    # the test submission order can't be changed
+    submission_test = os.path.join(output_dir, "submission_test.json")
+    test_preds = [int(np.argmax(logits_)) for logits_ in logits_all]
+    with open(submission_test, "w") as f:
             json.dump(test_preds, f)
+
+    print('Testing finished')
+
+
+def main():
+    args = parse_args()
+    
+    # Seed
+    # Set seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    # if n_gpu > 0:
+    torch.cuda.manual_seed_all(args.seed)
+
+    if args.do_train:
+        train(args)
+
+    if args.do_test:
+        test(args)
+
+    print('DONE')
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@ def reset_model(args, bert_config, model_cls):
     return model
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument("--gpu_ids", default='', required=True, type=str)
     # parser.add_argument("--bert_config_file", required=True,
@@ -157,12 +157,15 @@ def main():
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument('--fp16', default=False, action='store_true',
                         help="Whether to use 16-bit float precision instead of 32-bit")
+    return parser.parse_args()
 
-    args = parser.parse_args()
+
+def main():
+    args = parse_args()
 
     # Manage output files
     output_dir = os.path.join(args.output_dir, str(args.seed))
-    filename_scores = os.path.join(args.output_dir, 'scores.txt')
+    filename_scores = os.path.join(output_dir, 'scores.txt')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     with open(filename_scores, 'w') as f:
@@ -196,7 +199,7 @@ def main():
     # if os.path.exists(args.input_dir) == False:
         # os.makedirs(args.input_dir, exist_ok=True)
 
-
+    # Tokenizer
     # tokenizer = BertTokenizer(vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
     logger.info('Loading tokenizer...')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
@@ -206,6 +209,7 @@ def main():
     train_example_file = os.path.join(args.data_dir, 'train_examples' + suffix)
     train_feature_file = os.path.join(args.data_dir, 'train_features' + suffix)
 
+    # Generate (or load) train features
     logger.info('Generating train features..., feature_file = {}'.format(train_feature_file))
     train_features = generate_input(
         args.train_file, 
@@ -222,6 +226,7 @@ def main():
     dev_feature_file = os.path.join(args.data_dir, 'dev_features' + suffix)
     logger.info("Generating dev features..., feature_file = {}".format(dev_feature_file))
 
+    # Generate (or load) dev features
     eval_features = generate_input(
         args.predict_file, 
         None, 
@@ -235,7 +240,6 @@ def main():
     # # TODO: remove
     # train_features = train_feature[:100]
     # eval_features = eval_features[:100]
-
 
     logger.info("Train features {}".format(len(train_features)))
     num_train_steps = int(
@@ -268,6 +272,7 @@ def main():
     all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
     eval_data = TensorDataset(all_input_ids, all_input_masks, all_segment_ids, all_choice_masks,
                               all_example_index)
+    
     # Run prediction for full data
     eval_sampler = SequentialSampler(eval_data)
     eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.predict_batch_size)
@@ -275,9 +280,10 @@ def main():
     # Prepare model
     logger.info('Preparing model from checkpoint {}'.format(args.init_checkpoint))
     config = modeling.BertConfig.from_json_file(args.config_file)
-    model = modeling.BertForMultipleChoice(config, args.max_num_choices)
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
+
+    model = modeling.BertForMultipleChoice(config, args.max_num_choices)
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
 
     state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
@@ -295,6 +301,8 @@ def main():
     #                              weight_decay_rate=0.01,
     #                              max_grad_norm=1.0,
     #                              opt_pooler=True)
+
+    # Optimizer
     optimizer = get_optimizer(
         model,
         float16=args.fp16,
@@ -371,6 +379,7 @@ def main():
                 pbar.update(1)
 
         logger.info("***** Running predictions *****")
+        logger.info('Epoch = {}'.format(ep))
         logger.info("Num split examples = {}".format(len(eval_features)))
         logger.info("Batch size = {}".format(args.predict_batch_size))
 
@@ -400,14 +409,14 @@ def main():
                                              logit=logits))
 
         predict_file = 'dev_predictions.json'
-        logger.info('decoder raw results')
+        logger.info('Decode raw results')
 
         tmp_predict_file = os.path.join(output_dir, "raw_predictions.pkl")
         output_prediction_file = os.path.join(output_dir, predict_file)
         results = get_final_predictions(all_results, tmp_predict_file, g=True)
         write_predictions(results, output_prediction_file)
         
-        logger.info('predictions saved to {}'.format(output_prediction_file))
+        logger.info('Predictions saved to {}'.format(output_prediction_file))
 
         if args.predict_ans_file:
             acc = evaluate(args.predict_ans_file, output_prediction_file)
@@ -417,13 +426,15 @@ def main():
 
         train_loss = total_train_loss / (num_step + 1e-5)
         with open(filename_scores, 'a') as f:
-            vals = list(map(str, [ep, train_loss, acc]))
+            vals = list(map(str, [ep, train_loss, acc / 100]))
             f.write('\t'.join(vals))
             f.write('\n')
 
         # Save model
         model_to_save = model.module if hasattr(model, 'module') else model
-        model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
+        model_dir = os.path.join(output_dir, 'models')
+        os.makedirs(model_dir, exist_ok=True)
+        model_filename = os.path.join(model_dir, 'model_epoch_' + str(ep) + '.bin')
         torch.save(
             {"model": model_to_save.state_dict()},
             model_filename,
@@ -432,7 +443,7 @@ def main():
         # Save best model
         if best_acc is None or acc > best_acc:
             best_acc = acc
-            best_model_filename = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
+            best_model_filename = os.path.join(output_dir, 'best_model.bin')
             copyfile(model_filename, best_model_filename)
             # model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
             # torch.save(model_to_save.state_dict(), output_model_file)

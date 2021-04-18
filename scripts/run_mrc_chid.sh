@@ -21,13 +21,12 @@ out_dir=${out_dir:-"logs/$task_name"}
 
 seed=${seed:-2}
 epochs=${epochs:-2}
-gradient_accumulation_steps=${gradient_accumulation_steps:-4}
 
 python3 run_multichoice_mrc.py \
   --num_train_epochs=4 \
   --train_batch_size=24 \
   --predict_batch_size=24 \
-  --gradient_accumulation_steps=${gradient_accumulation_steps} \
+  --gradient_accumulation_steps=12 \
   --learning_rate=2e-5 \
   --warmup_proportion=0.06 \
   --max_seq_length=64 \

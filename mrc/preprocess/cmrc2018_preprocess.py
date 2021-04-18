@@ -139,6 +139,7 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
             doc_tokens = []
             char_to_word_offset = []
             prev_is_whitespace = True
+
             for c in context_chs:
                 if is_whitespace(c):
                     prev_is_whitespace = True
@@ -150,6 +151,10 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
                     prev_is_whitespace = False
                 if c != SPIECE_UNDERLINE:
                     char_to_word_offset.append(len(doc_tokens) - 1)
+
+            # print('doc_tokens')
+            # print(doc_tokens)
+            # exit(0)
 
             for qas in para['qas']:
                 qid = qas['id']
@@ -175,6 +180,9 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
                     start_position_final = char_to_word_offset[start_position]
                     end_position_final = char_to_word_offset[end_position]
 
+                    # print('start_position_final')
+                    # print(start_position_final)
+
                     if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
                         start_position_final += 1
 
@@ -183,6 +191,10 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
 
                     if actual_text != cleaned_answer_text:
                         print(actual_text, 'V.S', cleaned_answer_text)
+                        # print(context)
+                        # print(context_chs)
+                        # print(doc_tokens)
+                        # exit(0)
                         mis_match += 1
                         # ipdb.set_trace()
 
@@ -196,8 +208,9 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
 
     print('examples num:', len(examples))
     print('mis_match:', mis_match)
-    os.makedirs('/'.join(output_files[0].split('/')[0:-1]), exist_ok=True)
-    json.dump(examples, open(output_files[0], 'w'), ensure_ascii=False)
+    # TODO: uncomment
+    # os.makedirs('/'.join(output_files[0].split('/')[0:-1]), exist_ok=True)
+    # json.dump(examples, open(output_files[0], 'w'), ensure_ascii=False)
     print('saving to', output_files[0])
 
     # to features
@@ -213,7 +226,9 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
         all_doc_tokens = []
         for (i, token) in enumerate(example['doc_tokens']):
             orig_to_tok_index.append(len(all_doc_tokens))
+            # print(token)
             sub_tokens = tokenizer.tokenize(token)
+            # print(sub_tokens)
             for sub_token in sub_tokens:
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
@@ -226,9 +241,22 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
                 tok_end_position = orig_to_tok_index[example['end_position'] + 1] - 1
             else:
                 tok_end_position = len(all_doc_tokens) - 1
+            print('tok_position')
+            print(tok_start_position, tok_end_position)
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
                 example['orig_answer_text'])
+
+        print('orig_to_tok_index')
+        print(orig_to_tok_index)
+        print('all_doc_tokens')
+        print(all_doc_tokens)
+        print(example)
+        print('tok_start_position')
+        print(tok_start_position)
+        print('tok_end_position')
+        print(tok_end_position)
+        exit(0)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
