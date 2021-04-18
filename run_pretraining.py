@@ -112,7 +112,8 @@ class pretraining_dataset(Dataset):
         masked_lm_labels = torch.ones(input_ids.shape, dtype=torch.long) * -1
         index = self.max_pred_length
         # store number of  masked tokens in index
-        padded_mask_indices = (masked_lm_positions == 0).nonzero()
+        # padded_mask_indices = (masked_lm_positions == 0).nonzero()
+        padded_mask_indices = torch.nonzero(masked_lm_positions == 0, as_tuple=False)
         if len(padded_mask_indices) != 0:
             index = padded_mask_indices[0].item()
         masked_lm_labels[masked_lm_positions[:index]] = masked_lm_ids[:index]
@@ -278,6 +279,10 @@ def parse_arguments():
                         default=False,
                         action='store_true',
                         help="Whether to run training.")
+    parser.add_argument("--do_eval",
+                        default=False,
+                        action='store_true',
+                        help="Whether to do eval on dev set.")
     parser.add_argument('--json-summary', type=str, default="results/dllogger.json",
                         help='If provided, the json summary will be written to'
                              'the specified file.')
@@ -503,6 +508,106 @@ def take_optimizer_step(args, optimizer, model, overflow_buf, global_step):
 
     return global_step
 
+def evaluate(model, args, worker_init, device, criterion):
+    if is_main_process():
+        dllogger.log(step="PARAMETER", data={"eval_start": True})
+        dllogger.log(step="PARAMETER", data={"batch_size_per_gpu": args.train_batch_size})
+
+    model.eval()
+    most_recent_ckpts_paths = []
+    average_loss = 0.0  # averaged loss every args.log_freq steps
+
+    pool = ProcessPoolExecutor(1)
+
+    thread = None
+    restored_data_loader = None
+    files = [os.path.join(args.input_dir, f) for f in os.listdir(args.input_dir) if
+                os.path.isfile(os.path.join(args.input_dir, f)) and 'test' in f]
+    files.sort()
+    num_files = len(files)
+    f_start_id = 0
+
+    shared_file_list = {}
+
+    if torch.distributed.is_initialized() and get_world_size() > num_files:
+        remainder = get_world_size() % num_files
+        data_file = files[(f_start_id*get_world_size()+get_rank() + remainder*f_start_id)%num_files]
+    else:
+        data_file = files[(f_start_id*get_world_size()+get_rank())%num_files]
+
+    previous_file = data_file
+
+    if restored_data_loader is None:
+        train_data = pretraining_dataset(data_file, args.max_predictions_per_seq)
+        train_sampler = RandomSampler(train_data)
+        train_dataloader = DataLoader(train_data, sampler=train_sampler,
+                                        batch_size=args.train_batch_size * args.n_gpu,
+                                        num_workers=4, worker_init_fn=worker_init,
+                                        pin_memory=True)
+    else:
+        train_dataloader = restored_data_loader
+        restored_data_loader = None
+
+    overflow_buf = None
+    divisor = 0
+    if args.allreduce_post_accumulation:
+        overflow_buf = torch.cuda.IntTensor([0])
+
+    # print ("world_size: ", get_world_size())
+
+    for f_id in range(f_start_id, len(files) // get_world_size()):
+        # print ("F_ID: ", f_id)
+
+        if get_world_size() > num_files:
+            data_file = files[(f_id*get_world_size()+get_rank() + remainder*f_id)%num_files]
+        else:
+            # print ("rank: ", get_rank())
+            # print ((f_id*get_world_size()+get_rank())%num_files)
+            data_file = files[(f_id*get_world_size()+get_rank())%num_files]
+
+        previous_file = data_file
+
+        dataset_future = pool.submit(create_pretraining_dataset, data_file, args.max_predictions_per_seq, shared_file_list, args, worker_init)
+
+        train_iter = train_dataloader
+
+        # f_loss = 0.0
+        for step, batch in enumerate(train_iter):
+            if batch[0].shape[0] != args.train_batch_size:
+                continue
+            batch = [t.to(device) for t in batch]
+            input_ids, segment_ids, input_mask, masked_lm_labels, next_sentence_labels = batch
+            # prediction_scores, seq_relationship_score = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+            prediction_scores = model(input_ids=input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+            loss = criterion(prediction_scores, masked_lm_labels)
+            if args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu.
+            # f_loss += loss.item()
+            average_loss += loss.item()
+            divisor += 1
+
+            if divisor == 2000:
+                break
+        
+        if divisor == 2000:
+            break
+
+        # print (f_loss)
+        del train_dataloader
+        train_dataloader, data_file = dataset_future.result(timeout=None)
+    
+    average_loss = torch.tensor([average_loss]).cuda()
+    torch.distributed.all_reduce(average_loss)
+    average_loss = average_loss.item() / 8
+
+    if is_main_process():
+        dllogger.log(step="VALIDATION_LOSS", data={"eval_loss": average_loss / divisor})
+        print ("validation loss: ", average_loss / divisor)
+
+    return average_loss
+        
+
+
 def main():
     global timeout_sent
 
@@ -525,6 +630,9 @@ def main():
 
     raw_train_start = None
     if args.do_train:
+        # if args.do_eval:
+        #     evaluate(model, args, worker_init, device, criterion)
+
         if is_main_process():
             dllogger.log(step="PARAMETER", data={"train_start": True})
             dllogger.log(step="PARAMETER", data={"batch_size_per_gpu": args.train_batch_size})
@@ -584,8 +692,8 @@ def main():
             if args.allreduce_post_accumulation:
                 overflow_buf = torch.cuda.IntTensor([0])
 
-            for f_id in range(f_start_id + 1 , len(files)):
-                
+            for f_id in range(f_start_id + 1, len(files)):
+                # print ("epoch: {}, f_id: {}".format(epoch, f_id))
    
                 if get_world_size() > num_files:
                     data_file = files[(f_id*get_world_size()+get_rank() + remainder*f_id)%num_files]
@@ -596,7 +704,7 @@ def main():
 
                 dataset_future = pool.submit(create_pretraining_dataset, data_file, args.max_predictions_per_seq, shared_file_list, args, worker_init)
 
-                train_iter = tqdm(train_dataloader, desc="Iteration", disable=args.disable_progress_bar) if is_main_process() else train_dataloader
+                train_iter = train_dataloader
 
                 if raw_train_start is None:
                     raw_train_start = time.time()
@@ -650,27 +758,41 @@ def main():
 
                     if global_step >= args.steps_this_run or training_steps % (
                             args.num_steps_per_checkpoint * args.gradient_accumulation_steps) == 0 or timeout_sent:
-                        if is_main_process() and not args.skip_checkpoint:
+                        # # eval on dev set
+                        # if args.do_eval:
+                        #     evaluate(model, args, worker_init, device, criterion)
+                        # model.train()
+
+                        # if is_main_process() and not args.skip_checkpoint:
+                        if not args.skip_checkpoint:
                             # Save a trained model
-                            dllogger.log(step="PARAMETER", data={"checkpoint_step": global_step})
+                            if is_main_process():
+                                dllogger.log(step="PARAMETER", data={"checkpoint_step": global_step})
                             model_to_save = model.module if hasattr(model,
                                                                     'module') else model  # Only save the model it-self
                             if args.resume_step < 0 or not args.phase2:
                                 output_save_file = os.path.join(args.output_dir, "ckpt_{}.pt".format(global_step))
                             else:
                                 output_save_file = os.path.join(args.output_dir, "ckpt_{}.pt".format(global_step + args.phase1_end_step))
-                            if args.do_train:
-                                torch.save({'model': model_to_save.state_dict(),
-                                            'optimizer': optimizer.state_dict(),
-                                            'master params': list(amp.master_params(optimizer)),
-                                            'files': [f_id] + files,
-                                            'epoch': epoch,
-                                            'data_loader': None if global_step >= args.max_steps else train_dataloader}, output_save_file)
+                            
+                            if is_main_process():
+                                if args.do_train:
+                                    torch.save({'model': model_to_save.state_dict(),
+                                                'optimizer': optimizer.state_dict(),
+                                                'master params': list(amp.master_params(optimizer)),
+                                                'files': [f_id] + files,
+                                                'epoch': epoch,
+                                                'data_loader': None if global_step >= args.max_steps else train_dataloader}, output_save_file)
 
-                                most_recent_ckpts_paths.append(output_save_file)
-                                if len(most_recent_ckpts_paths) > 3:
-                                    ckpt_to_be_removed = most_recent_ckpts_paths.pop(0)
-                                    os.remove(ckpt_to_be_removed)
+                                    most_recent_ckpts_paths.append(output_save_file)
+                                ## keep all checkpoints
+                                # if len(most_recent_ckpts_paths) > 3:
+                                #     ckpt_to_be_removed = most_recent_ckpts_paths.pop(0)
+                                #     os.remove(ckpt_to_be_removed)
+                            
+                            if args.do_eval:
+                                evaluate(model, args, worker_init, device, criterion)
+                            model.train()
 
                         # Exiting the training due to hitting max steps, or being sent a 
                         # timeout from the cluster scheduler
