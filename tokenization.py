@@ -115,23 +115,23 @@ def load_vocab_spm(vocab_file):
 # ENCODE2CH = "/home/ubuntu/WubiBERT/data/cangjie_to_chinese.pkl"
 # CH2ENCODE = "/home/ubuntu/WubiBERT/data/chinese_to_cangjie.pkl"
 
-cangjie2ch = "/home/ubuntu/WubiBERT/data/cangjie_to_chinese.pkl"
-ch2cangjie = "/home/ubuntu/WubiBERT/data/chinese_to_cangjie.pkl"
+cangjie2ch = "/home/ubuntu/WubiBERT/data/dicts/cangjie_to_chinese.pkl"
+ch2cangjie = "/home/ubuntu/WubiBERT/data/dicts/chinese_to_cangjie.pkl"
 
-stroke2ch = "/home/ubuntu/WubiBERT/data/stroke_to_chinese.pkl"
-ch2stroke = "/home/ubuntu/WubiBERT/data/chinese_to_stroke.pkl"
+stroke2ch = "/home/ubuntu/WubiBERT/data/dicts/stroke_to_chinese.pkl"
+ch2stroke = "/home/ubuntu/WubiBERT/data/dicts/chinese_to_stroke.pkl"
 
-zhengma2ch = "/home/ubuntu/WubiBERT/data/zhengma_to_chinese.pkl"
-ch2zhengma = "/home/ubuntu/WubiBERT/data/chinese_to_zhengma.pkl"
+zhengma2ch = "/home/ubuntu/WubiBERT/data/dicts/zhengma_to_chinese.pkl"
+ch2zhengma = "/home/ubuntu/WubiBERT/data/dicts/chinese_to_zhengma.pkl"
 
-wubi2ch = "/home/ubuntu/WubiBERT/data/wubi_to_chinese.pkl"
-ch2wubi = "/home/ubuntu/WubiBERT/data/chinese_to_wubi.pkl"
+wubi2ch = "/home/ubuntu/WubiBERT/data/dicts/wubi_to_chinese.pkl"
+ch2wubi = "/home/ubuntu/WubiBERT/data/dicts/chinese_to_wubi.pkl"
 
-pinyin2ch = "/home/ubuntu/WubiBERT/data/pinyin_to_chinese.pkl"
-ch2pinyin = "/home/ubuntu/WubiBERT/data/chinese_to_pinyin.pkl"
+pinyin2ch = "/home/ubuntu/WubiBERT/data/dicts/pinyin_to_chinese.pkl"
+ch2pinyin = "/home/ubuntu/WubiBERT/data/dicts/chinese_to_pinyin.pkl"
 
-zhuyin2ch = "/home/ubuntu/WubiBERT/data/zhuyin_to_chinese.pkl"
-ch2zhuyin = "/home/ubuntu/WubiBERT/data/chinese_to_zhuyin.pkl"
+zhuyin2ch = "/home/ubuntu/WubiBERT/data/dicts/zhuyin_to_chinese.pkl"
+ch2zhuyin = "/home/ubuntu/WubiBERT/data/dicts/chinese_to_zhuyin.pkl"
 
 control_char = u'0123456789abcdefghijklmnopqrstuvwxyz' 
 control_uni = [chr(ord(c)+50000) for c in control_char]
@@ -808,3 +808,13 @@ def _is_punctuation(char):
     if cat.startswith("P"):
         return True
     return False
+
+ALL_TOKENIZERS = {
+    "ConcatSep": ConcatSepTokenizer,
+    "WubiZh": WubiZhTokenizer,
+    "RawZh": RawZhTokenizer,
+    'CommonZh': CommonZhTokenizer,
+    "BertZh": BertZhTokenizer,
+    "Bert": BertTokenizer,
+    "BertHF": BertTokenizer
+}

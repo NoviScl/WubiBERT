@@ -37,10 +37,17 @@ from tqdm import tqdm
 
 from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
-from tokenization import BertTokenizer, ConcatSepTokenizer, WubiZhTokenizer, RawZhTokenizer, BertZhTokenizer
+from tokenization import (
+    ALL_TOKENIZERS, 
+    BertTokenizer, 
+    ConcatSepTokenizer, 
+    WubiZhTokenizer, 
+    RawZhTokenizer, 
+    BertZhTokenizer,
+)
 from optimization import BertAdam, warmup_linear, get_optimizer
 from schedulers import LinearWarmUpScheduler
-from utils import mkdir
+from utils import mkdir, get_freer_gpu
 
 # from google_albert_pytorch_modeling import AlbertConfig, AlbertForMultipleChoice
 from mrc.preprocess.CHID_preprocess import RawResult, get_final_predictions, write_predictions, generate_input, evaluate
@@ -48,6 +55,7 @@ from mrc.pytorch_modeling import ALBertConfig, ALBertForMultipleChoice
 from mrc.pytorch_modeling import BertConfig, BertForMultipleChoice
 # from tools.official_tokenization import BertTokenizer
 # from tools.pytorch_optimization import get_optimization, warmup_linear
+from run_pretraining import pretraining_dataset, WorkerInitObj
 
 
 logging.basicConfig(
@@ -56,16 +64,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-
-
-ALL_TOKENIZERS = {
-    "ConcatSep": ConcatSepTokenizer,
-    "WubiZh": WubiZhTokenizer,
-    "RawZh": RawZhTokenizer,
-    "BertZh": BertZhTokenizer,
-    "Bert": BertTokenizer,
-    "BertHF": BertTokenizer
-}
 
 
 def reset_model(args, bert_config, model_cls):
@@ -160,6 +158,14 @@ def parse_args():
     return parser.parse_args()
 
 
+def get_device():
+    if torch.cuda.is_available():
+        free_gpu = get_freer_gpu()
+        return torch.device('cuda', free_gpu)
+    else:
+        return torch.device('cpu')
+
+
 def main():
     args = parse_args()
 
@@ -178,7 +184,8 @@ def main():
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     n_gpu = torch.cuda.device_count()
     print("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
 
@@ -195,6 +202,18 @@ def main():
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+    # Prepare model
+    logger.info('Preparing model from checkpoint {}'.format(args.init_checkpoint))
+    config = modeling.BertConfig.from_json_file(args.config_file)
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+
+    model = modeling.BertForMultipleChoice(config, args.max_num_choices)
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+
+    state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
+    model.load_state_dict(state_dict, strict=False)
+    model.to(device)
 
     # if os.path.exists(args.input_dir) == False:
         # os.makedirs(args.input_dir, exist_ok=True)
@@ -203,9 +222,10 @@ def main():
     # tokenizer = BertTokenizer(vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
     logger.info('Loading tokenizer...')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
-    
+    real_tokenizer_type = args.output_dir.split(os.path.sep)[-2]
+
     # Load train data
-    suffix = '_{}_{}.pkl'.format(str(args.max_seq_length), args.tokenizer_type)
+    suffix = '_{}_{}_{}.pkl'.format(str(args.max_seq_length), real_tokenizer_type, str(config.vocab_size))
     train_example_file = os.path.join(args.data_dir, 'train_examples' + suffix)
     train_feature_file = os.path.join(args.data_dir, 'train_features' + suffix)
 
@@ -277,18 +297,6 @@ def main():
     eval_sampler = SequentialSampler(eval_data)
     eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.predict_batch_size)
 
-    # Prepare model
-    logger.info('Preparing model from checkpoint {}'.format(args.init_checkpoint))
-    config = modeling.BertConfig.from_json_file(args.config_file)
-    if config.vocab_size % 8 != 0:
-        config.vocab_size += 8 - (config.vocab_size % 8)
-
-    model = modeling.BertForMultipleChoice(config, args.max_num_choices)
-    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-
-    state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
-    model.load_state_dict(state_dict, strict=False)
-    model.to(device)
     # if n_gpu > 1:
     #     model = torch.nn.DataParallel(model)
 
@@ -340,8 +348,9 @@ def main():
         steps_per_epoch = num_train_steps // args.num_train_epochs
         with tqdm(total=int(steps_per_epoch), desc='Epoch %d' % (ep + 1)) as pbar:
             for step, batch in enumerate(train_dataloader):
-                if n_gpu == 1:
-                    batch = tuple(t.to(device) for t in batch)  # multi-gpu does scattering it-self
+                # if n_gpu == 1:
+                #     batch = tuple(t.to(device) for t in batch)  # multi-gpu does scattering it-self
+                batch = tuple(t.to(device) for t in batch)
                 input_ids, input_masks, segment_ids, choice_masks, labels = batch
                 if step == 0 and ep == 0:
                     logger.info('shape of input_ids: {}'.format(input_ids.shape))

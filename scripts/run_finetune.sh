@@ -25,7 +25,7 @@ seed=${seed:-"2"}
 out_dir=${out_dir:-"logs/${task_name}/wubi_zh"}
 # mode=${mode:-"prediction"}
 mode=${mode:-"test"}
-num_gpu=${num_gpu:-"1"}
+num_gpu=${num_gpu:-"8"}
 
 # Hyperparameters
 epochs=${epochs:-"6"}
@@ -38,7 +38,10 @@ max_seq_length=${max_seq_length:-128}
 fewshot=${fewshot:-1}
 # precision=${14:-"fp16"}
 
+echo "mode = $mode"
+
 mkdir -p $out_dir
+mkdir -p "$out_dir/$seed"
 
 if [ "$mode" = "eval" ] ; then
   num_gpu=1
@@ -58,7 +61,8 @@ else
   mpi_command=" -m torch.distributed.launch --master_port=423333 --nproc_per_node=$num_gpu"
 fi
 
-CMD="python3 $mpi_command run_glue.py "
+# CMD="python $mpi_command run_glue.py "
+CMD="python run_glue.py "
 CMD+="--task_name ${task_name} "
 if [[ $mode == *"train"* ]] ; then
   CMD+="--do_train "

@@ -236,7 +236,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=128, max_nu
         input_masks = []
         segment_ids = []
         for i, elem in enumerate(example.options):
-            option = tokenizer.tokenize(elem)
+            # option = tokenizer.tokenize(elem)
+            option = [''.join(tokenizer.tokenize(ch)) for ch in elem]
 
             tag = example.tag
             all_doc_tokens = []

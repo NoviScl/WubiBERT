@@ -24,7 +24,7 @@ epochs=${epochs:-6}
 
 mkdir -p $out_dir
 
-CMD="python3 run_c3.py "
+CMD="python run_c3.py "
 
 # CMD+="--task_name ${task_name} "
 if [[ $mode == *"train"* ]] ; then

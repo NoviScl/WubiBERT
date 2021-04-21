@@ -22,7 +22,7 @@ out_dir=${out_dir:-"logs/$task_name"}
 seed=${seed:-2}
 epochs=${epochs:-2}
 
-python3 run_multichoice_mrc.py \
+python run_multichoice_mrc.py \
   --num_train_epochs=4 \
   --train_batch_size=24 \
   --predict_batch_size=24 \

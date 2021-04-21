@@ -283,7 +283,7 @@ class CslProcessor(DataProcessor):
         examples = []
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
-            text_a = " ".join(line['keyword'])
+            text_a = "，".join(line['keyword'])
             text_b = line['abst']
             # label = str(line['label']) if set_type != 'test' else '0'
             label = str(line['label'])

@@ -47,8 +47,8 @@ from utils import is_main_process, format_step, get_world_size, get_rank
 from apex.parallel import DistributedDataParallel as DDP
 from schedulers import LinearWarmUpScheduler
 from apex.parallel.distributed import flat_dist_call
-import amp_C
-import apex_C
+# import amp_C
+# import apex_C
 from apex.amp import _amp_state
 
 import dllogger

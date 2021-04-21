@@ -35,15 +35,23 @@ from torch.utils.data.distributed import DistributedSampler
 
 from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
-from tokenization import BertTokenizer, ConcatSepTokenizer, WubiZhTokenizer, RawZhTokenizer, BertZhTokenizer
+from tokenization import (
+    ALL_TOKENIZERS, 
+    BertTokenizer, 
+    ConcatSepTokenizer, 
+    WubiZhTokenizer, 
+    RawZhTokenizer, 
+    BertZhTokenizer,
+)
 from optimization import BertAdam, warmup_linear, get_optimizer
 from schedulers import LinearWarmUpScheduler
-from utils import mkdir, is_main_process
+from utils import mkdir, is_main_process, get_freer_gpu
 
 # from google_albert_pytorch_modeling import AlbertConfig, AlbertForMultipleChoice
 # from pytorch_modeling import BertConfig, BertForMultipleChoice, ALBertConfig, ALBertForMultipleChoice
 from mrc.tools import official_tokenization as tokenization
 from mrc.tools import utils
+from run_pretraining import pretraining_dataset, WorkerInitObj
 # from tools.pytorch_optimization import get_optimization, warmup_linear
 
 # Contants for C3
@@ -55,16 +63,6 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-ALL_TOKENIZERS = {
-    "ConcatSep": ConcatSepTokenizer,
-    "WubiZh": WubiZhTokenizer,
-    "RawZh": RawZhTokenizer,
-    "BertZh": BertZhTokenizer,
-    "Bert": BertTokenizer,
-    "BertHF": BertTokenizer
-}
 
 
 class InputExample(object):
@@ -411,6 +409,8 @@ def get_features(
     data_dir, 
     max_seq_length,
     tokenizer,
+    tokenizer_type,
+    vocab_size,
     label_list):
 
     if data_type == 'eval':
@@ -419,10 +419,16 @@ def get_features(
     if data_type not in ['train', 'dev', 'test']:
         raise ValueError(f'Expected "train", "dev" or "test", but got {data_type}')
     
-    tokenizer_to_type = {v: k for k, v in ALL_TOKENIZERS.items()}
-    tokenizer_type = tokenizer_to_type[type(tokenizer)]
+    # tokenizer_to_type = {v: k for k, v in ALL_TOKENIZERS.items()}
+    # tokenizer_type = tokenizer_to_type[type(tokenizer)]
 
-    file_feature = '{}_features_{}_{}.pkl'.format(data_type, max_seq_length, tokenizer_type)
+    file_feature = '{}_features_{}_{}_{}.pkl'.format(data_type, max_seq_length, tokenizer_type, vocab_size)
+    file_feature = os.path.join(data_dir, file_feature)
+
+    # print(file_feature)
+    # print("!!!!")
+    # exit(0)
+
     # feature_dir = os.path.join(data_dir, data_type + '_features_{}.pkl'.format(max_seq_length))
     if os.path.exists(file_feature):
     # if False:
@@ -438,6 +444,13 @@ def get_features(
     return features
 
 
+def get_device(args):
+    if torch.cuda.is_available():
+        free_gpu = get_freer_gpu()
+        return torch.device('cuda', free_gpu)
+    else:
+        return torch.device('cpu')
+
 
 def train(args):
     # Output files
@@ -452,15 +465,19 @@ def train(args):
         f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
 
     # Setup cuda
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
-    else:
-        device = torch.device("cuda", args.local_rank)
-        n_gpu = 1
-        # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
-    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+    # if args.local_rank == -1 or args.no_cuda:
+    #     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     n_gpu = torch.cuda.device_count()
+    # else:
+    #     device = torch.device("cuda", args.local_rank)
+    #     n_gpu = 1
+    #     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+    #     torch.distributed.init_process_group(backend='nccl')
+    device = get_device(args)
+    n_gpu = torch.cuda.device_count()
+    logger.info(f'Device: {device}')
+    logger.info(f'Num gpus: {n_gpu}')
+    # logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
@@ -488,6 +505,9 @@ def train(args):
     logger.info('Loading tokenizer...')
     logger.info(f'vocab file={args.vocab_file}, vocab_model_file={args.vocab_model_file}')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    real_tokenizer_type = args.output_dir.split(os.path.sep)[-2]
+    # print(real_tokenizer_type)
+    # exit(0)
     
     # Load training data
     logger.info('Loading training data...')
@@ -526,7 +546,8 @@ def train(args):
             device_ids=[args.local_rank],
             output_device=args.local_rank)
     elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        # model = torch.nn.DataParallel(model)
+        pass
 
     # Save config file
     # if args.init_checkpoint is not None:
@@ -578,6 +599,8 @@ def train(args):
             args.data_dir, 
             args.max_seq_length,
             tokenizer,
+            real_tokenizer_type,
+            config.vocab_size,
             label_list)
         # feature_file = f'dev_features_{args.max_seq_length}_{args.tokenizer_type}.pkl'
         # feature_dir = os.path.join(args.data_dir, feature_file)
@@ -645,6 +668,8 @@ def train(args):
             args.data_dir,
             args.max_seq_length,
             tokenizer,
+            real_tokenizer_type,
+            config.vocab_size,
             label_list)
         # TODO: remove (for debugging only)
         # train_features = train_features[:600]
@@ -844,15 +869,19 @@ def test(args):
 
 
     # Setup cuda
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
-    else:
-        device = torch.device("cuda", args.local_rank)
-        n_gpu = 1
-        # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
-    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+    # if args.local_rank == -1 or args.no_cuda:
+    #     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     n_gpu = torch.cuda.device_count()
+    # else:
+    #     device = torch.device("cuda", args.local_rank)
+    #     n_gpu = 1
+    #     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+    #     torch.distributed.init_process_group(backend='nccl')
+    # logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+    device = get_device(args)
+    n_gpu = torch.cuda.device_count()
+    logger.info(f'Device: {device}')
+    logger.info(f'Num gpus: {n_gpu}')
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
@@ -906,14 +935,17 @@ def test(args):
         model.half()
     model.to(device)
 
+    real_tokenizer_type = args.output_dir.split(os.path.sep)[-2]
     logger.info('Loading test data...')
     test_examples = processor.get_test_examples()
     test_features = get_features(
         test_examples, 
         'test', 
         args.data_dir, 
-        args.max_seq_length, 
+        args.max_seq_length,
         tokenizer,
+        real_tokenizer_type,
+        config.vocab_size,
         label_list)
     # feature_file = f'test_features_{args.max_seq_length}_{args.tokenizer_type}.pkl'
     # feature_dir = os.path.join(args.data_dir, feature_file)

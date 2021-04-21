@@ -37,14 +37,23 @@ from tqdm import tqdm, trange
 
 from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
-from tokenization import BertTokenizer, ConcatSepTokenizer, WubiZhTokenizer, RawZhTokenizer, BertZhTokenizer
+from tokenization import (
+    ALL_TOKENIZERS,
+    BertTokenizer, 
+    ConcatSepTokenizer, 
+    WubiZhTokenizer, 
+    RawZhTokenizer, 
+    BertZhTokenizer, 
+    CommonZhTokenizer,
+)
 from optimization import BertAdam, warmup_linear
 from schedulers import LinearWarmUpScheduler
 from apex import amp
 from sklearn.metrics import matthews_corrcoef, f1_score
 from utils import (is_main_process, mkdir_by_main_process, format_step,
-                   get_world_size)
+                   get_world_size, get_freer_gpu)
 from processors.glue import PROCESSORS, convert_examples_to_features
+from run_pretraining import pretraining_dataset, WorkerInitObj
 
 torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
@@ -55,15 +64,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-
-ALL_TOKENIZERS = {
-    "ConcatSep": ConcatSepTokenizer,
-    "WubiZh": WubiZhTokenizer,
-    "RawZh": RawZhTokenizer,
-    "BertZh": BertZhTokenizer,
-    "Bert": BertTokenizer,
-    "BertHF": BertTokenizer
-}
 
 FILENAME_BEST_MODEL = 'best_model.bin'
 FILENAME_TEST_RESULT = 'result_test.txt'
@@ -631,28 +631,43 @@ def load_model(config_file, filename, num_labels):
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
     model = modeling.BertForSequenceClassification(config, num_labels=num_labels)
+    print('filename =', filename)
     state_dict = torch.load(filename, map_location='cpu')
     model.load_state_dict(state_dict["model"], strict=False)
     return model
 
 
-def train(args):
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
+def get_device(args):
+    if torch.cuda.is_available():
+        free_gpu = get_freer_gpu()
+        return torch.device('cuda', free_gpu)
     else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-        n_gpu = 1
-        # Initializes the distributed backend which will take care of
-        # sychronizing nodes/GPUs.
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group(backend='nccl')
+        return torch.device('cpu')
+
+
+def train(args):
+    device = get_device(args)
+    n_gpu = torch.cuda.device_count()
+    logger.info(f'Device: {device}')
+    logger.info(f'Num gpus: {n_gpu}')
+    # if args.local_rank == -1 or args.no_cuda:
+    #     device = torch.device(
+    #         "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     n_gpu = torch.cuda.device_count()
+    # else:
+    #     # torch.cuda.set_device(args.local_rank)
+    #     device = torch.device("cuda", args.local_rank)
+    #     n_gpu = 1
+    #     # Initializes the distributed backend which will take care of
+    #     # sychronizing nodes/GPUs.
+    #     if not torch.distributed.is_initialized():
+    #         torch.distributed.init_process_group(backend='nccl')
 
     logger.info('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
+    print('vocab_file:', args.vocab_file)
+    print('vocab_model_file:', args.vocab_model_file)
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
 
     # Setup output files
@@ -722,7 +737,8 @@ def train(args):
                               "distributed and fp16 training.")
         model = DDP(model)
     elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        pass
+        # model = torch.nn.DataParallel(model)
 
     loss_fct = torch.nn.CrossEntropyLoss()
 
@@ -924,18 +940,20 @@ def test(args):
         output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
         is_fewshot = True
     
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
-    else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-        n_gpu = 1
-        # Initializes the distributed backend which will take care of
-        # sychronizing nodes/GPUs.
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group(backend='nccl')
+    device = get_device(args)
+    n_gpu = torch.cuda.device_count()
+    # if args.local_rank == -1 or args.no_cuda:
+    #     device = torch.device(
+    #         "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     n_gpu = torch.cuda.device_count()
+    # else:
+    #     # torch.cuda.set_device(args.local_rank)
+    #     device = torch.device("cuda", args.local_rank)
+    #     n_gpu = 1
+    #     # Initializes the distributed backend which will take care of
+    #     # sychronizing nodes/GPUs.
+    #     if not torch.distributed.is_initialized():
+    #         torch.distributed.init_process_group(backend='nccl')
 
     # Tokenizer and processor
     logger.info('Loading processor and tokenizer...')
@@ -1101,25 +1119,30 @@ def main(args):
     #     )
     #     ptvsd.wait_for_attach()
 
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
-    else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-        n_gpu = 1
-        # Initializes the distributed backend which will take care of
-        # sychronizing nodes/GPUs.
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group(backend='nccl')
-    logger.info("device: {} n_gpu: {}, distributed training: {}, "
-                "16-bits training: {}".format(
-                    device,
-                    n_gpu,
-                    bool(args.local_rank != -1),
-                    args.fp16,
-                ))
+    # if args.local_rank == -1 or args.no_cuda:
+    #     device_name = 
+    #     device = torch.device(
+    #         "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     n_gpu = torch.cuda.device_count()
+    # else:
+    #     free_gpu = get_freer_gpu
+    #     torch.cuda.set_device(free_gpu)
+    #     logger.info(f'Set device: {free_gpu}')
+    #     device = torch.device("cuda", free_gpu)
+    #     # torch.cuda.set_device(args.local_rank)
+    #     # device = torch.device("cuda", args.local_rank)
+    #     n_gpu = 1
+    #     # Initializes the distributed backend which will take care of
+    #     # sychronizing nodes/GPUs.
+    #     if not torch.distributed.is_initialized():
+    #         torch.distributed.init_process_group(backend='nccl')
+    # logger.info("device: {} n_gpu: {}, distributed training: {}, "
+    #             "16-bits training: {}".format(
+    #                 device,
+    #                 n_gpu,
+    #                 bool(args.local_rank != -1),
+    #                 args.fp16,
+    #             ))
 
     if not args.do_train and not args.do_eval and not args.do_test:
         raise ValueError("At least one of `do_train`, `do_eval` or "
@@ -1167,7 +1190,7 @@ def main(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if n_gpu > 0:
+    if torch.cuda.is_available() > 0:
         torch.cuda.manual_seed_all(args.seed)
    
     # get_tokenization_result()
@@ -1180,6 +1203,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    print("run_glue.py")
-    get_tokenization_result(parse_args())
+    print('[run_glue.py] __name__ == "__main__"')
+    print('device_count')
+    print(torch.cuda.device_count())
+
+    # get_tokenization_result(parse_args())
     main(parse_args())

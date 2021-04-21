@@ -34,7 +34,10 @@ precision=${14:-"fp16"}
 seed=${15:-"2"}
 mode=${16:-"train eval"}
 
+echo "mode = $mode"
+
 mkdir -p $out_dir
+mkdir -p "$out_dir/$seed"
 
 if [ "$mode" = "eval" ] ; then
   num_gpu=1

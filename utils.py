@@ -11,6 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import numpy as np
 import torch
 import torch.distributed as dist
 
@@ -63,3 +65,9 @@ def mkdir_by_main_process(path):
     if is_main_process():
         mkdir(path)
     barrier()
+
+
+def get_freer_gpu():
+    os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
+    memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
+    return np.argmax(memory_available)
