@@ -39,17 +39,17 @@ def main(args):
     #                               + "_max_pred_" + str(args.max_predictions_per_seq) + "_masked_lm_prob_" + str(args.masked_lm_prob) \
     #                               + "_random_seed_" + str(args.random_seed) + "_dupe_factor_" + str(args.dupe_factor)
     
-    hdf5_tfrecord_folder_prefix = args.vocab_file.split('/')[-1].split('.')[0] + "_lower_case_" + str(args.do_lower_case) + "_seq_len_" + str(args.max_seq_length) \
-                                    + "_max_pred_" + str(args.max_predictions_per_seq) + "_masked_lm_prob_" + str(args.masked_lm_prob) \
-                                    + "_random_seed_" + str(args.random_seed) + "_dupe_factor_" + str(args.dupe_factor)
+    # hdf5_tfrecord_folder_prefix = args.vocab_file.split('/')[-1].split('.')[0] + "_lower_case_" + str(args.do_lower_case) + "_seq_len_" + str(args.max_seq_length) \
+    #                                 + "_max_pred_" + str(args.max_predictions_per_seq) + "_masked_lm_prob_" + str(args.masked_lm_prob) \
+    #                                 + "_random_seed_" + str(args.random_seed) + "_dupe_factor_" + str(args.dupe_factor)
 
 
     directory_structure = {
         'download' : working_dir + '/download',    # Downloaded and decompressed
         'extracted' : working_dir +'/extracted',    # Extracted from whatever the initial format is (e.g., wikiextractor)
-        'formatted' : working_dir + '/formatted_cws_wubi',    # This is the level where all sources should look the same
-        'sharded' : working_dir + '/sharded_cws_wubi_' + "training_shards_" + str(args.n_training_shards) + "_test_shards_" + str(args.n_test_shards) + "_fraction_" + str(args.fraction_test_set),
-        'hdf5': working_dir + '/hdf5_' + hdf5_tfrecord_folder_prefix
+        'formatted' : working_dir + '/formatted_cws_zhuyin',    # This is the level where all sources should look the same
+        'sharded' : working_dir + '/sharded_cws_zhuyin_' + "training_shards_" + str(args.n_training_shards) + "_test_shards_" + str(args.n_test_shards) + "_fraction_" + str(args.fraction_test_set),
+        # 'hdf5': working_dir + '/hdf5_' + hdf5_tfrecord_folder_prefix
     }
 
     print('\nDirectory Structure:')

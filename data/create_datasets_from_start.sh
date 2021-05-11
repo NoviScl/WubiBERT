@@ -42,7 +42,7 @@ to_download=${1:-"wiki_only"}
 DATASET=baidu_baike
 # # Shard the text files
 ## tmux 22
-# python3 bertPrep.py --action sharding --dataset $DATASET
+python3 bertPrep.py --action sharding --dataset $DATASET
 
 # Create HDF5 files Phase 1
 # python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
@@ -63,8 +63,8 @@ DATASET=baidu_baike
 # python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
 # --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/raw_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/raw_zh_22675.model
 
-python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
---max_predictions_per_seq 20 --vocab_file /home/ubuntu/wubi/cws_wubi_zh_22675.vocab --model_file /home/ubuntu/wubi/cws_wubi_zh_22675.model
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/wubi/cws_wubi_zh_22675.vocab --model_file /home/ubuntu/wubi/cws_wubi_zh_22675.model
 
 
 # Create HDF5 files Phase 2
@@ -105,6 +105,6 @@ python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_leng
 # --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/bert_chinese_uncased_22675.vocab --model_file placeholder
 
 
-python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
---max_predictions_per_seq 80 --vocab_file /home/ubuntu/wubi/cws_wubi_zh_22675.vocab --model_file /home/ubuntu/wubi/cws_wubi_zh_22675.model
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/wubi/cws_wubi_zh_22675.vocab --model_file /home/ubuntu/wubi/cws_wubi_zh_22675.model
 
