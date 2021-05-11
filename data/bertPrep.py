@@ -47,9 +47,8 @@ def main(args):
     directory_structure = {
         'download' : working_dir + '/download',    # Downloaded and decompressed
         'extracted' : working_dir +'/extracted',    # Extracted from whatever the initial format is (e.g., wikiextractor)
-        'formatted' : working_dir + '/formatted',    # This is the level where all sources should look the same
-        'sharded' : working_dir + '/sharded_' + "training_shards_" + str(args.n_training_shards) + "_test_shards_" + str(args.n_test_shards) + "_fraction_" + str(args.fraction_test_set),
-        'tfrecord' : working_dir + '/tfrecord'+ hdf5_tfrecord_folder_prefix,
+        'formatted' : working_dir + '/formatted_cws_wubi',    # This is the level where all sources should look the same
+        'sharded' : working_dir + '/sharded_cws_wubi_' + "training_shards_" + str(args.n_training_shards) + "_test_shards_" + str(args.n_test_shards) + "_fraction_" + str(args.fraction_test_set),
         'hdf5': working_dir + '/hdf5_' + hdf5_tfrecord_folder_prefix
     }
 
@@ -361,6 +360,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--model_file',
         type=str,
+        default=None,
         help='Specify absolute path to model (sentencepiece) file to use)'
     )
 
