@@ -136,6 +136,12 @@ ch2pinyin = "/home/ubuntu/WubiBERT/data/chinese_to_pinyin.pkl"
 zhuyin2ch = "/home/ubuntu/WubiBERT/data/zhuyin_to_chinese.pkl"
 ch2zhuyin = "/home/ubuntu/WubiBERT/data/chinese_to_zhuyin.pkl"
 
+shuffle_map = "../data/word_shuffle_dict.pkl"
+
+with open(shuffle_map, 'rb') as f:
+    shuffle_mapping = pickle.load(f)
+
+
 control_char = u'0123456789abcdefghijklmnopqrstuvwxyz' 
 control_uni = [chr(ord(c)+50000) for c in control_char]
 
@@ -500,6 +506,98 @@ class CommonZhTokenizer(object):
     
     ## TODO: implement the detokenizer!
     
+
+
+
+class ShuffledWubiTokenizer(object):
+    "for cangjie_zh, wubi_zh, ... all such tokenization"
+
+    def __init__(self, vocab_file, model_file, do_lower_case=True, max_len=None,
+                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        if (not os.path.isfile(vocab_file)) or (not os.path.isfile(model_file)):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained ".format(vocab_file))
+        if 'cangjie' in vocab_file:
+            self.map_dict = load_dict(ch2cangjie)
+        elif 'stroke' in vocab_file:
+            self.map_dict = load_dict(ch2stroke)
+        elif 'zhengma' in vocab_file:
+            self.map_dict = load_dict(ch2zhengma)
+        elif 'wubi' in vocab_file:
+            self.map_dict = load_dict(ch2wubi)
+        elif 'pinyin' in vocab_file:
+            self.map_dict = load_dict(ch2pinyin)
+        elif 'zhuyin' in vocab_file:
+            self.map_dict = load_dict(ch2zhuyin)
+
+        self.vocab = load_vocab_spm(vocab_file)
+        self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()])
+        self.max_len = max_len if max_len is not None else int(1e12)
+    
+    def convert_line(self, line):
+        # text = text.lower() #  always lowercasing
+        text = ""
+        for c in line.strip():
+            if c in shuffle_map:
+                newc = shuffle_map[c]
+            else:
+                newc = c 
+            text += newc
+
+        out_line = "" 
+        for ch_word in text:
+            ch_char = ch_word.strip()
+            if len(ch_char) == 0:
+                continue
+                
+            ## all convert to EN punctuations,
+            ## to avoid mixture of different punctuations
+            if ch_char in CH2EN_PUNC:
+                ch_char = CH2EN_PUNC[ch_char]
+
+            if ch_char in self.map_dict:
+                # add _ at the end of each ZH char as seperation
+                out_line += self.map_dict[ch_char].strip() + chr(ord('_')+50000) ## for sp_concat
+            else:
+                if ch_char in control_char:
+                    ch_char = chr(ord(ch_char)+50000)
+                out_line += ch_char  ## sp_concat
+        return out_line
+    
+    def tokenize(self, text):
+        out_line = self.convert_line(text)
+        return self.spm_tokenizer.encode(out_line, out_type=str)
+
+    def convert_tokens_to_ids(self, tokens):
+        """Converts a sequence of tokens into ids using the vocab."""
+        ids = []
+        for token in tokens:
+            if token in self.vocab:
+                ids.append(self.vocab[token])
+            else:
+                ids.append(self.vocab['[UNK]'])
+        if len(ids) > self.max_len:
+            raise ValueError(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this BERT model ({} > {}). Running this"
+                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids):
+        """Converts a sequence of ids in wordpiece tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            tokens.append(self.ids_to_tokens[i])
+        return tokens
+    
+    ## TODO: implement the detokenizer!
+    
+
+
+
 
 
 class CWSCommonZhTokenizer(object):
