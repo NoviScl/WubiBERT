@@ -20,6 +20,9 @@ tokenizer_type=${tokenizer_type:-"RawZh"}
 # Dataset
 task_name=${task_name:-"tnews"}
 data_dir=${data_dir:-"datasets/$task_name/split"}
+train_dir=${train_dir:-"datasets/$task_name/split"}
+dev_dir=${dev_dir:-"datasets/$task_name/split"}
+test_dir=${test_dir:-"datasets/$task_name/split"}
 
 seed=${seed:-"2"}
 out_dir=${out_dir:-"logs/${task_name}/wubi_zh"}
@@ -36,12 +39,14 @@ learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
 max_seq_length=${max_seq_length:-128}
 fewshot=${fewshot:-1}
+two_level_embeddings=${two_level_embeddings:-"0"}
 # precision=${14:-"fp16"}
 
 echo "mode = $mode"
 
 mkdir -p $out_dir
 mkdir -p "$out_dir/$seed"
+
 
 if [ "$mode" = "eval" ] ; then
   num_gpu=1
@@ -62,7 +67,9 @@ else
 fi
 
 # CMD="python $mpi_command run_glue.py "
-CMD="python run_glue.py "
+CMD="python3"
+# CMD="python"
+CMD+=" run_glue.py "
 CMD+="--task_name ${task_name} "
 if [[ $mode == *"train"* ]] ; then
   CMD+="--do_train "
@@ -78,24 +85,34 @@ if [[ $mode == *"eval"* ]] || [[ $mode == *"test"* ]]; then
   CMD+="--eval_batch_size=$batch_size "
 fi
 
-CMD+="--gradient_accumulation_steps=$gradient_accumulation_steps "
-CMD+="--do_lower_case "
+if [[ $two_level_embeddings == "1" ]] ; then
+  CMD+="--two_level_embeddings "
+fi
+
 CMD+="--tokenizer_type $tokenizer_type "
+CMD+="--vocab_file=$vocab_file "
 CMD+="--vocab_model_file $vocab_model_file "
+CMD+="--init_checkpoint $init_checkpoint "
+CMD+="--config_file=$config_file "
+
+CMD+="--output_dir $out_dir "
 CMD+="--data_dir $data_dir "
+CMD+="--train_dir $train_dir "
+CMD+="--dev_dir $dev_dir "
+CMD+="--test_dir $test_dir "
+
 CMD+="--bert_model bert-tiny "
 CMD+="--seed $seed "
-CMD+="--init_checkpoint $init_checkpoint "
+
+CMD+="--epochs $epochs "
 CMD+="--warmup_proportion $warmup_proportion "
 CMD+="--max_seq_length $max_seq_length "
 CMD+="--learning_rate $learning_rate "
-CMD+="--num_train_epochs $epochs "
-CMD+="--max_steps $max_steps "
-CMD+="--vocab_file=$vocab_file "
-CMD+="--config_file=$config_file "
-CMD+="--output_dir $out_dir "
+CMD+="--gradient_accumulation_steps=$gradient_accumulation_steps "
+# CMD+="--max_steps $max_steps "
 CMD+="--fewshot $fewshot "
-CMD+="$use_fp16"
+CMD+="--do_lower_case "
+# CMD+="$use_fp16"
 
 LOGFILE=$out_dir/$seed/logfile
 

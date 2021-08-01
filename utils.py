@@ -12,6 +12,9 @@
 # limitations under the License.
 
 import os
+import random
+import json
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -71,3 +74,83 @@ def get_freer_gpu():
     os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
     memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
     return np.argmax(memory_available)
+
+
+def get_device():
+    if torch.cuda.is_available():
+        return 'cuda'
+        free_gpu = get_freer_gpu()
+        return torch.device('cuda', free_gpu)
+    else:
+        return torch.device('cpu')
+
+
+def output_dir_to_tokenizer_name(output_dir):
+    tokenizer_types = [
+        'cws_raw',
+        'cws_wubi',
+        'cws_zhuyin',
+        'cangjie',
+        'stroke',
+        'pinyin',
+        'wubi',
+        'zhengma',
+        'zhuyin',
+        'raw',
+        'bert',
+    ]
+    out_dir = output_dir.split(os.path.sep)[-2]
+    for t in tokenizer_types:
+        if t in out_dir:
+            return t
+    return None
+
+
+def set_seed(seed):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+
+
+def json_save_by_line(data, filename):
+    with open(filename, 'w', encoding='utf8') as f:
+        for d in data:
+            f.write(json.dumps(d, ensure_ascii=False))
+            f.write('\n')
+
+
+def json_load_by_line(filename):
+    data = []
+    with open(filename, 'r', encoding='utf8') as f:
+        for line in f:
+            data.append(json.loads(line))
+    return data
+
+
+def get_subchar_pos(tokens, subchars):
+	'''
+	Return starting index of each subchar in tokens.
+	NOTE: This assumes that the concatenation of tokens is equal to the 
+	concatenation of subchars.
+
+	Example:
+	>>> Input:
+	>>> subchars  = ['jin+', 'ti', 'an+', 'ti', 'an+', 'qi+', 'hen+', 'hao+']
+	>>> tokens    = ['jin', '+', 'tian+', 'tian+qi', '+', 'hen+hao+']
+	>>> token_pos = [0, 2, 2, 3, 3, 3, 5, 5]
+	'''
+	pos = [None] * len(subchars)
+	len_t = 0
+	len_s = 0
+	j = -1  # idx of last token that was added to len_t
+	for i, subchar in enumerate(subchars):
+		while len_t <= len_s:
+			j += 1
+			len_t += len(tokens[j])
+		pos[i] = j
+		len_s += len(subchar)
+	return pos

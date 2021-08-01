@@ -27,6 +27,8 @@ import pickle
 import random
 from shutil import copyfile
 
+import consts
+
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -425,16 +427,11 @@ def get_features(
     file_feature = '{}_features_{}_{}_{}.pkl'.format(data_type, max_seq_length, tokenizer_type, vocab_size)
     file_feature = os.path.join(data_dir, file_feature)
 
-    # print(file_feature)
-    # print("!!!!")
-    # exit(0)
-
-    # feature_dir = os.path.join(data_dir, data_type + '_features_{}.pkl'.format(max_seq_length))
     if os.path.exists(file_feature):
     # if False:
         logger.info(f'Loading features from "{file_feature}"...')
         features = pickle.load(open(file_feature, 'rb'))
-        logger.info(f'Loading {len(file_feature)} features.')
+        logger.info(f'Loaded {len(features)} features.')
     else:
         logger.info(f'Converting {len(examples)} examples into features...')
         features = convert_examples_to_features(examples, label_list, max_seq_length, tokenizer)
@@ -446,6 +443,7 @@ def get_features(
 
 def get_device(args):
     if torch.cuda.is_available():
+        return torch.device('cuda')  # Only one gpu
         free_gpu = get_freer_gpu()
         return torch.device('cuda', free_gpu)
     else:
@@ -464,15 +462,6 @@ def train(args):
     with open(filename_scores, 'w') as f:
         f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
 
-    # Setup cuda
-    # if args.local_rank == -1 or args.no_cuda:
-    #     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    #     n_gpu = torch.cuda.device_count()
-    # else:
-    #     device = torch.device("cuda", args.local_rank)
-    #     n_gpu = 1
-    #     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-    #     torch.distributed.init_process_group(backend='nccl')
     device = get_device(args)
     n_gpu = torch.cuda.device_count()
     logger.info(f'Device: {device}')
@@ -1028,7 +1017,7 @@ def test(args):
         'test_loss': test_loss,
         'test_accuracy': test_accuracy}
 
-    output_test_file = os.path.join(output_dir, "results_test.txt")
+    output_test_file = os.path.join(output_dir, consts.FILENAME_TEST_RESULT)
     with open(output_test_file, "w") as writer:
         logger.info("***** Test results *****")
         for key in sorted(result.keys()):
