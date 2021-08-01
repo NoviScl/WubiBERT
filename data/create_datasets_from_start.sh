@@ -41,11 +41,31 @@ to_download=${1:-"wiki_only"}
 
 DATASET=baidu_baike
 # # Shard the text files
+## tmux 22
 # python3 bertPrep.py --action sharding --dataset $DATASET
 
-# # Create HDF5 files Phase 1
-# python3 /workspace/bert/data/bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
-# --max_predictions_per_seq 20 --vocab_file $BERT_PREP_WORKING_DIR/download/google_pretrained_weights/uncased_L-24_H-1024_A-16/vocab.txt --do_lower_case 1
+# Create HDF5 files Phase 1
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/cangjie_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/cangjie_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/zhengma_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/zhengma_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/wubi_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/wubi_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/pinyin_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/pinyin_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/zhuyin_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/zhuyin_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/WubiBERT/tokenizers/raw_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/raw_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 128 \
+# --max_predictions_per_seq 20 --vocab_file /home/ubuntu/wubi/cws_zhuyin_zh_22675.vocab --model_file /home/ubuntu/wubi/cws_zhuyin_zh_22675.model
+
 
 # Create HDF5 files Phase 2
 # python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
@@ -57,12 +77,34 @@ DATASET=baidu_baike
 # python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
 # --max_predictions_per_seq 80 --vocab_file ../tokenizers/sp_wubi_zh_30k_sep.vocab --model_file ../tokenizers/sp_wubi_zh_30k_sep.model 
 
-python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
---max_predictions_per_seq 80 --vocab_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_45k.vocab --model_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_45k.model 
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/cangjie_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/cangjie_zh_22675.model
 
-python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
---max_predictions_per_seq 80 --vocab_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_60k.vocab --model_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_60k.model 
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_60k.vocab --model_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_60k.model 
 
-python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
---max_predictions_per_seq 80 --vocab_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_15k.vocab --model_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_15k.model 
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_15k.vocab --model_file /mnt/nfs/home/scl/LanguageModeling/BERT/tokenizers/sp_raw_zh_15k.model 
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/zhengma_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/zhengma_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/wubi_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/wubi_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/pinyin_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/pinyin_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/zhuyin_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/zhuyin_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/raw_zh_22675.vocab --model_file /home/ubuntu/WubiBERT/tokenizers/raw_zh_22675.model
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/WubiBERT/tokenizers/bert_chinese_uncased_22675.vocab --model_file placeholder
+
+
+# python3 bertPrep.py --action create_hdf5_files --dataset $DATASET --max_seq_length 512 \
+# --max_predictions_per_seq 80 --vocab_file /home/ubuntu/wubi/cws_zhuyin_zh_22675.vocab --model_file /home/ubuntu/wubi/cws_zhuyin_zh_22675.model
 
