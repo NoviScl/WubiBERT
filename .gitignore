@@ -11,3 +11,5 @@ results/*
 tokenize_results/*
 *.pkl
 
+wubi_results/*
+results/*
