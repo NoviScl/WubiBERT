@@ -26,7 +26,7 @@ import subprocess
 
 def main(args):
     # working_dir = os.environ['BERT_PREP_WORKING_DIR']
-    working_dir = '/mnt/datadisk0/scl/baike'
+    working_dir = '/data2/private/clsi/wubi_corpus_shuffled'
 
     print('Working Directory:', working_dir)
     print('Action:', args.action)
@@ -218,6 +218,7 @@ def main(args):
         # note: need to differentiate between different tokenizers (done in the function above)
         output_file_prefix = args.dataset
 
+        # args.n_training_shards = 1
         for i in range(args.n_training_shards):
             last_process = create_record_worker(output_file_prefix + '_training', i)
 
@@ -262,7 +263,8 @@ if __name__ == "__main__":
             'sst-2',
             'squad',
             'all',
-            'baidu_baike'
+            'baidu_baike',
+            'wiki'
         }
     )
 
