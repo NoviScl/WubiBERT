@@ -27,6 +27,8 @@ import pickle
 import random
 from shutil import copyfile
 
+import consts
+
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -123,12 +125,23 @@ class DataProcessor(object):
 
 
 class c3Processor(DataProcessor):
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, do_train=False, do_eval=False, do_test=False):
         self.D = [[], [], []]
         self.data_dir = data_dir
 
         for sid in range(3):
         # for sid in range(2):
+            # Skip files that are not going to use
+            if not do_train:
+                if sid == 0:
+                    continue
+            if not do_eval:
+                if sid == 1:
+                    continue
+            if not do_test:
+                if sid == 2:
+                    continue
+                
             data = []
             for subtask in ["d", "m"]:
                 files = ["train.json", "dev.json", "test.json"]
@@ -136,7 +149,7 @@ class c3Processor(DataProcessor):
                 filename = self.data_dir + "/" + subtask + "-" + files[sid]
                 with open(filename, "r", encoding="utf8") as f:
                     data += json.load(f)
-            print(f'Loaded {len(data)} examples from "{filename}"')
+            logger.info('Loaded {} examples from "{}"'.format(len(data), filename))
             if sid == 0:
                 random.shuffle(data)
             for i in range(len(data)):
@@ -168,8 +181,8 @@ class c3Processor(DataProcessor):
     def _create_examples(self, data, set_type):
         """Creates examples for the training and dev sets."""
         cache_dir = os.path.join(self.data_dir, set_type + '_examples.pkl')
-        if os.path.exists(cache_dir):
-        # if False:
+        # if os.path.exists(cache_dir):
+        if False:
             examples = pickle.load(open(cache_dir, 'rb'))
         else:
             examples = []
@@ -179,9 +192,7 @@ class c3Processor(DataProcessor):
                 for k in range(4):
                     if data[i][2 + k] == data[i][6]:
                         answer = str(k)
-
                 label = tokenization.convert_to_unicode(answer)
-
                 for k in range(4):
                     guid = "%s-%s-%s" % (set_type, i, k)
                     text_a = tokenization.convert_to_unicode(data[i][0])
@@ -249,16 +260,16 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         assert len(segment_ids) == max_seq_length
 
         label_id = label_map[example.label]
-        if ex_index < 2:
+        if ex_index < 1:
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join(
                 [tokenization.printable_text(x) for x in tokens]))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            logger.info(
-                "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label: %s (id = %d)" % (example.label, label_id))
+        #     logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+        #     logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+        #     logger.info(
+        #         "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+        #     logger.info("label: %s (id = %d)" % (example.label, label_id))
 
         features[-1].append(
             InputFeatures(
@@ -271,7 +282,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
     if len(features[-1]) == 0:
         features = features[:-1]
-    # print('#features', len(features))
     return features
 
 
@@ -399,6 +409,7 @@ def parse_args():
                         type=int,
                         default=1,
                         help="Number of updates steps to accumualte before performing a backward/update pass.")
+    parser.add_argument('--test_model', type=str, default=None)
     # parser.add_argument('--setting_file', type=str, default='setting.txt')
     return parser.parse_args()
 
@@ -417,35 +428,28 @@ def get_features(
         data_type = 'dev'
 
     if data_type not in ['train', 'dev', 'test']:
-        raise ValueError(f'Expected "train", "dev" or "test", but got {data_type}')
-    
-    # tokenizer_to_type = {v: k for k, v in ALL_TOKENIZERS.items()}
-    # tokenizer_type = tokenizer_to_type[type(tokenizer)]
+        raise ValueError('Expected "train", "dev" or "test", but got', data_type)
 
     file_feature = '{}_features_{}_{}_{}.pkl'.format(data_type, max_seq_length, tokenizer_type, vocab_size)
     file_feature = os.path.join(data_dir, file_feature)
 
-    # print(file_feature)
-    # print("!!!!")
-    # exit(0)
-
-    # feature_dir = os.path.join(data_dir, data_type + '_features_{}.pkl'.format(max_seq_length))
-    if os.path.exists(file_feature):
+    if data_type != 'test' and os.path.exists(file_feature):
     # if False:
-        logger.info(f'Loading features from "{file_feature}"...')
+        logger.info('Loading features from \"' + file_feature + '\"...')
         features = pickle.load(open(file_feature, 'rb'))
-        logger.info(f'Loading {len(file_feature)} features.')
+        logger.info('Loaded {} features.'.format(len(features)))
     else:
-        logger.info(f'Converting {len(examples)} examples into features...')
+        logger.info('Converting {} examples into features...'.format(len(examples)))
         features = convert_examples_to_features(examples, label_list, max_seq_length, tokenizer)
         with open(file_feature, 'wb') as w:
             pickle.dump(features, w)
-        logger.info(f'Saved {len(features)} features to "{file_feature}".')
+        logger.info('Saved {} features to "{}".'.format(len(features), file_feature))
     return features
 
 
 def get_device(args):
     if torch.cuda.is_available():
+        return torch.device('cuda')  # Only one gpu
         free_gpu = get_freer_gpu()
         return torch.device('cuda', free_gpu)
     else:
@@ -464,19 +468,10 @@ def train(args):
     with open(filename_scores, 'w') as f:
         f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
 
-    # Setup cuda
-    # if args.local_rank == -1 or args.no_cuda:
-    #     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    #     n_gpu = torch.cuda.device_count()
-    # else:
-    #     device = torch.device("cuda", args.local_rank)
-    #     n_gpu = 1
-    #     # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-    #     torch.distributed.init_process_group(backend='nccl')
     device = get_device(args)
     n_gpu = torch.cuda.device_count()
-    logger.info(f'Device: {device}')
-    logger.info(f'Num gpus: {n_gpu}')
+    logger.info('Device: ' + str(device))
+    logger.info('Num gpus: ' + str(n_gpu))
     # logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
 
     if args.gradient_accumulation_steps < 1:
@@ -485,29 +480,20 @@ def train(args):
 
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
-    # Set seed
-    # random.seed(args.seed)
-    # np.random.seed(args.seed)
-    # torch.manual_seed(args.seed)
-    # if n_gpu > 0:
-    #     torch.cuda.manual_seed_all(args.seed)
-
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
 
 
     # Processor
     logger.info('Loading processor...')
-    processor = c3Processor(args.data_dir)
+    processor = c3Processor(args.data_dir, do_train=True, do_eval=True)
     label_list = processor.get_labels()
 
     # Tokenizer
     logger.info('Loading tokenizer...')
-    logger.info(f'vocab file={args.vocab_file}, vocab_model_file={args.vocab_model_file}')
+    logger.info('vocab file={}, vocab_model_file={}'.format(args.vocab_file, args.vocab_model_file))
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     real_tokenizer_type = args.output_dir.split(os.path.sep)[-2]
-    # print(real_tokenizer_type)
-    # exit(0)
     
     # Load training data
     logger.info('Loading training data...')
@@ -519,7 +505,6 @@ def train(args):
                               args.gradient_accumulation_steps * args.num_train_epochs)
 
     # Prepare Model
-    # device = 'cpu'
     logger.info('Loading model from checkpoint "{}"...'.format(args.init_checkpoint))
     config = modeling.BertConfig.from_json_file(args.config_file)
     # Padding for divisibility by 8
@@ -529,8 +514,6 @@ def train(args):
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
     model = modeling.BertForMultipleChoice(config, NUM_CHOICES)
     state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
-    # print(state_dict['bert.embeddings.word_embeddings.weight'].shape)
-    # print(model.state_dict()['bert.embeddings.word_embeddings.weight'].shape)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
 
@@ -548,24 +531,6 @@ def train(args):
     elif n_gpu > 1:
         # model = torch.nn.DataParallel(model)
         pass
-
-    # Save config file
-    # if args.init_checkpoint is not None:
-    #     utils.torch_show_all_params(model)
-    #     utils.torch_init_model(model, args.init_checkpoint)
-    # print(model.config)
-    # print("DONE")
-    # exit(0)
-    # if 'albert' in args.bert_config_file:
-    #     if 'google' in args.bert_config_file:
-    #         bert_config = AlbertConfig.from_json_file(args.bert_config_file)
-    #         model = AlbertForMultipleChoice(bert_config, NUM_CHOICES=NUM_CHOICES)
-    #     else:
-    #         bert_config = ALBertConfig.from_json_file(args.bert_config_file)
-    #         model = ALBertForMultipleChoice(bert_config, NUM_CHOICES=NUM_CHOICES)
-    # else:
-    #     bert_config = BertConfig.from_json_file(args.bert_config_file)
-    #     model = BertForMultipleChoice(bert_config, NUM_CHOICES=NUM_CHOICES)
 
     logger.info('Saving config file...')
     model_to_save = model.module if hasattr(model, 'module') else model
@@ -723,21 +688,8 @@ def train(args):
                     batch = tuple(t.to(device) for t in batch)
                     input_ids, input_mask, segment_ids, label_ids = batch
 
-                    if step == 0:
-                        print('input_ids')
-                        print(input_ids)
-                        print('label_ids')
-                        print(label_ids)
-
-
-                    # try:
                     loss = model(input_ids, segment_ids, input_mask, label_ids)
-                    # except:
-                    #     print(input_ids[0], 0)
-                    #     for ii in input_ids:
-                    #         print(torch.max(ii))
-                    #     print(label_ids)
-                    #     exit(0)
+
                     if n_gpu > 1:
                         loss = loss.mean()  # mean() to average on multi-gpu.
                     if args.gradient_accumulation_steps > 1:
@@ -819,11 +771,11 @@ def train(args):
                 logger.info("***** Eval results *****")
                 for key in sorted(result.keys()):
                     logger.info("  %s = %s", key, str(result[key]))
-                logger.info(f'  Epoch = {ep}')
+                logger.info('  Epoch = {}'.format(ep))
 
                 # Save result of this epoch
                 with open(filename_scores, 'a') as f:
-                    f.write(f"{ep}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
+                    f.write("{}\t{}\t{}\t{}\n".format(ep, train_loss, eval_loss, eval_acc))
 
                 # with open(args.log_file, 'a') as aw:
                 #     aw.write("-------------------global steps:{}-------------------\n".format(global_step))
@@ -880,8 +832,8 @@ def test(args):
     # logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
     device = get_device(args)
     n_gpu = torch.cuda.device_count()
-    logger.info(f'Device: {device}')
-    logger.info(f'Num gpus: {n_gpu}')
+    logger.info('Device: ' + str(device))
+    logger.info('Num gpus: ' + str(n_gpu))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
@@ -892,7 +844,7 @@ def test(args):
 
     # Tokenizer and processor
     logger.info('Loading processor...')
-    processor = c3Processor(args.data_dir)
+    processor = c3Processor(args.data_dir, do_test=True)
     label_list = processor.get_labels()
     logger.info('Loading tokenizer...')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
@@ -906,8 +858,14 @@ def test(args):
 
     # Load model
     # filename_best_model = os.path.join(output_dir, modeling.WEIGHTS_NAME + '_best')
-    filename_best_model = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
-    filename_config = os.path.join(output_dir, modeling.FILENAME_CONFIG)
+    if args.test_model is not None and len(args.test_model) > 0:
+        filename_best_model = args.test_model
+    else:
+        filename_best_model = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
+    if args.config_file is not None and len(args.config_file) > 0:
+        filename_config = args.config_file
+    else:
+        filename_config = os.path.join(output_dir, modeling.FILENAME_CONFIG)
 
     logger.info('Loading model from "{}"...'.format(filename_best_model))
     config = modeling.BertConfig.from_json_file(filename_config)
@@ -960,9 +918,9 @@ def test(args):
     # test_features = test_features[:100]
 
     logger.info("***** Running testing *****")
-    logger.info(f'  Num examples = {len(test_examples)}')
-    logger.info(f'  Num features = {len(test_features)}')
-    logger.info(f"  Batch size   = {args.eval_batch_size}")
+    logger.info('  Num examples = {}'.format(len(test_examples)))
+    logger.info('  Num features = {}'.format(len(test_features)))
+    logger.info('  Batch size   = {}'.format(args.eval_batch_size))
 
     input_ids = []
     input_mask = []
@@ -1009,9 +967,6 @@ def test(args):
         for i in range(len(logits)):
             logits_all += [logits[i]]
 
-        # print('logits_all')
-        # print(logits_all)
-
 
         tmp_test_accuracy = accuracy(logits, label_ids.reshape(-1))
 
@@ -1028,7 +983,7 @@ def test(args):
         'test_loss': test_loss,
         'test_accuracy': test_accuracy}
 
-    output_test_file = os.path.join(output_dir, "results_test.txt")
+    output_test_file = os.path.join(output_dir, consts.FILENAME_TEST_RESULT)
     with open(output_test_file, "w") as writer:
         logger.info("***** Test results *****")
         for key in sorted(result.keys()):
@@ -1036,10 +991,7 @@ def test(args):
             writer.write("%s = %s\n" % (key, str(result[key])))
     output_test_file = os.path.join(output_dir, "logits_test.txt")
 
-    # print('len(logits_all)')
-    # print(len(logits_all))
-
-    print('saving to logits_test.txt')
+    logger.info('saving to logits_test.txt')
     with open(output_test_file, "w") as f:
         for i in range(len(logits_all)):
             for j in range(len(logits_all[i])):

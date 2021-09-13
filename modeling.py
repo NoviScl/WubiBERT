@@ -204,7 +204,8 @@ class BertConfig(object):
                  max_position_embeddings=512,
                  type_vocab_size=2,
                  initializer_range=0.02,
-                 output_all_encoded_layers=False):
+                 output_all_encoded_layers=False,
+                 layer_norm_eps=1e-12):
         """Constructs BertConfig.
 
         Args:
@@ -248,6 +249,11 @@ class BertConfig(object):
             self.type_vocab_size = type_vocab_size
             self.initializer_range = initializer_range
             self.output_all_encoded_layers = output_all_encoded_layers
+            self.layer_norm_eps = layer_norm_eps
+            
+            # For compatibility with Transformers model in BERT+CRF
+            self.output_attentions = output_all_encoded_layers
+            self.output_hidden_states = output_all_encoded_layers
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -350,12 +356,55 @@ class BertEmbeddings(nn.Module):
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, input_ids, token_type_ids):
+    def forward(self, input_ids, token_type_ids, token_ids=None, 
+                pos_left=None, pos_right=None, use_token_embeddings=None):
         seq_length = input_ids.size(1)
         position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
         position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
 
-        words_embeddings = self.word_embeddings(input_ids)
+        if token_ids is None or not use_token_embeddings:
+            words_embeddings = self.word_embeddings(input_ids)
+        else:
+            subchar_embeddings = self.word_embeddings(input_ids)  # (B, L, D)
+
+            if use_token_embeddings:
+                token_embeddings = self.word_embeddings(token_ids)    # (B, L, D)
+                # Add mean of corresponding token embeddings to subchar embeddings.
+                device = input_ids.device
+                B = subchar_embeddings.shape[0]
+                L = subchar_embeddings.shape[1]
+                D = subchar_embeddings.shape[2]
+                for i in range(B):  # for each example
+                    for j in range(L):  # for each subchar
+                        left = pos_left[i][j]
+                        right = pos_right[i][j]
+
+                        # Make sure [left, right) is a valid range of tokens
+                        if left >= L:
+                            left = L - 1
+                        if right >= L:
+                            right = L - 1
+                        
+                        # Sum token embeddings
+                        if left < right:
+                            indices = torch.arange(left, right, device=device) 
+                            t = torch.index_select(token_embeddings[i], 0, indices)   # (right-left, D)
+                            t = torch.mean(t, 0)                                      # (D)
+                        elif left == right:
+                            # Know: left == right only if the subchar is a padding,
+                            # in which case, the embedding doesn't matter (it's masked).
+                            t = torch.zeros(D, device=device)                      # (D)
+                        else:
+                            print(pos_left[i])
+                            print(pos_right[i])
+                            print(left, right)
+                            print(i, j)
+                            raise ValueError('pos_right should never be less than corresponding pos_left.')
+                        # Subchar embeddings is the mean of itself and mean of corresponding token embeddings
+                        subchar_embeddings[i][j] = (subchar_embeddings[i][j] + t) / 2
+
+            words_embeddings = subchar_embeddings
+
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -828,7 +877,8 @@ class BertModel(BertPreTrainedModel):
         self.apply(self.init_bert_weights)
         self.output_all_encoded_layers = config.output_all_encoded_layers
 
-    def forward(self, input_ids, token_type_ids, attention_mask):
+    def forward(self, input_ids, token_type_ids, attention_mask,
+                token_ids=None, pos_left=None, pos_right=None, use_token_embeddings=None):
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -844,7 +894,9 @@ class BertModel(BertPreTrainedModel):
         extended_attention_mask = extended_attention_mask.to(dtype=self.embeddings.word_embeddings.weight.dtype) # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        embedding_output = self.embeddings(input_ids, token_type_ids)
+        embedding_output = self.embeddings(input_ids, token_type_ids, token_ids=token_ids,
+                                           pos_left=pos_left, pos_right=pos_right,
+                                           use_token_embeddings=use_token_embeddings)
         encoded_layers = self.encoder(embedding_output, extended_attention_mask)
         sequence_output = encoded_layers[-1]
         pooled_output = self.pooler(sequence_output)
@@ -1092,8 +1144,12 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, num_labels)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None):
-        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None,
+                token_ids=None, pos_left=None, pos_right=None, use_token_embeddings=None):
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
+                                     token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+                                     use_token_embeddings=use_token_embeddings
+        )
         pooled_output = self.dropout(pooled_output)
         return self.classifier(pooled_output)
 
@@ -1290,8 +1346,11 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids, attention_mask, start_positions=None, end_positions=None):
-        encoded_layers, _ = self.bert(input_ids, token_type_ids, attention_mask)
+    def forward(self, input_ids, token_type_ids, attention_mask, start_positions=None, end_positions=None,
+                token_ids=None, pos_left=None, pos_right=None, use_token_embeddings=None):
+        encoded_layers, _ = self.bert(input_ids, token_type_ids, attention_mask,
+                                      token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+                                      use_token_embeddings=use_token_embeddings)
         sequence_output = encoded_layers[-1]
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)

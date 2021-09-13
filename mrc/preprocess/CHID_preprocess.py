@@ -7,6 +7,7 @@
 import collections
 import os
 import pickle
+import random
 
 import numpy as np
 import json
@@ -215,9 +216,20 @@ def add_tokens_for_around(tokens, pos, num_tokens):
     return tokens_l, tokens_r
 
 
-def convert_examples_to_features(examples, tokenizer, max_seq_length=128, max_num_choices=10):
+def convert_examples_to_features(
+    examples, 
+    tokenizer,
+    idiom_dict,
+    max_seq_length=128, 
+    max_num_choices=10,
+    split_char=False,
+    shuffle=True,
+    add_def=True,
+    max_def_length=32,
+    ):
     '''
-    将所有候选答案放置在片段开头
+    将所有候选答案放置在片段开头，在其后面加“：”（冒号）以及
+    成语的定义。
     '''
 
     def _loop(example, unique_id, label):
@@ -236,8 +248,18 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=128, max_nu
         input_masks = []
         segment_ids = []
         for i, elem in enumerate(example.options):
-            # option = tokenizer.tokenize(elem)
-            option = [''.join(tokenizer.tokenize(ch)) for ch in elem]
+            if split_char:
+                option = [''.join(tokenizer.tokenize(ch)) for ch in elem]
+                n_option_token = len(option)
+            else:
+                option = tokenizer.tokenize(elem)
+                n_option_token = len(option)
+                if add_def:
+                    definition = '：' + idiom_dict[elem]
+                    option += tokenizer.tokenize(definition)
+                    option = option[:max_def_length]
+            
+            # choice_mask = [1] * len(option)
 
             tag = example.tag
             all_doc_tokens = []
@@ -251,7 +273,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=128, max_nu
 
             pos = all_doc_tokens.index(tag)
             # num_tokens = max_tokens_for_doc - 5  # [unused1]和segA的成语
-            num_tokens = max_tokens_for_doc - len(option) - 1
+            # num_tokens = max_tokens_for_doc - len(option) - 1
+            num_tokens = max_seq_length - len(option) - 4  # 4 special tokens
             tmp_l, tmp_r = add_tokens_for_around(all_doc_tokens, pos, num_tokens)
             num_l = len(tmp_l)
             num_r = len(tmp_r)
@@ -290,15 +313,20 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=128, max_nu
                 print('input_id, max_seq_length:')
                 print(len(input_id), max_seq_length)
                 print(len(tokens))
+                print('example.doc_tokens:')
                 print(example.doc_tokens)
+                print('all_doc_tokens:')
                 print(all_doc_tokens)
+                print('label:')
                 print(label)
                 print('elem')
                 print(elem)
                 print('option')
                 print(option)
+                print('tokens')
                 print(tokens)
                 print(input_id)
+                print('max_seq_length')
                 print(max_seq_length)
             assert len(input_id) == max_seq_length
             assert len(input_mask) == max_seq_length
@@ -338,13 +366,16 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=128, max_nu
                 choice_masks=choice_masks,
                 label=label))
 
-    max_tokens_for_doc = max_seq_length - 3  # [CLS] choice [SEP] document [SEP]
+    # max_tokens_for_doc = max_seq_length - 3  # [CLS] choice [SEP] document [SEP]
     features = []
     unique_id = 0
 
     # examples = examples[:10]
 
-    for (example_index, example) in enumerate(tqdm(examples)):
+    if shuffle:
+        random.shuffle(examples)
+
+    for (example_index, example) in enumerate(tqdm(examples, mininterval=8.0)):
 
         label = example.answer_index
         if label != None:
@@ -462,13 +493,30 @@ def evaluate(ans_f, pre_f):
     acc_num = 0
     for id_ in ans:
         if id_ not in pre:
-            # continue
-            raise FileNotFoundError(f'Expected answer for ID {id_} in {pre_f}')
+            continue
+            # raise FileNotFoundError(f'Expected answer for ID {id_} in {pre_f}')
         else:
             total_num += 1
             if ans[id_] == pre[id_]:
                 acc_num += 1
 
     acc = acc_num / total_num
-    acc *= 100
     return acc
+
+
+def write_features_json(features, file):
+    with open(file, 'w') as f:
+        for feature in features:
+            d = {
+                'unique_id': feature.unique_id,
+                'example_id': feature.example_id,
+                'tag': feature.tag,
+                'tokens': feature.tokens,
+                'input_ids': feature.input_ids,
+                'input_masks': feature.input_masks,
+                'segment_ids': feature.segment_ids,
+                'choice_masks': feature.choice_masks,
+                'label': feature.label,
+            }
+            f.write(json.dumps(d, ensure_ascii=False))
+            f.write('\n')

@@ -2,8 +2,13 @@
 __pycache__/
 **pyc
 datasets/*
-slurm_output/*
+
+
 logs/*
 results/*
 tokenize_results/*
 *.pkl
+
+# Slurm
+slurm_output/*
+slurm-*.out

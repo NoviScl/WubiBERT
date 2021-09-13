@@ -21,10 +21,12 @@ mode=${mode:-"train eval test"}
 seed=${seed:-2}
 epochs=${epochs:-6}
 # epochs=${epochs:-8}
+test_model=${test_model:-""}
 
 mkdir -p $out_dir
 
-CMD="python run_c3.py "
+CMD="python3 "
+CMD+="run_c3.py "
 
 # CMD+="--task_name ${task_name} "
 if [[ $mode == *"train"* ]] ; then
@@ -39,6 +41,10 @@ if [[ $mode == *"eval"* ]] || [[ $mode == *"test"* ]]; then
     CMD+="--do_test "
   fi
   # CMD+="--eval_batch_size=$batch_size "
+fi
+
+if [[ $test_model != "" ]] ; then
+  CMD+="--test_model=${test_model} "
 fi
 
 

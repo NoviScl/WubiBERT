@@ -1,48 +1,78 @@
 #!/usr/bin/env bash
-
 model_name="bert-tiny"
-
-task_name=${task_name:-"cmrc"}
-
-init_checkpoint=${init_checkpoint:-"results/checkpoints_raw_zh/ckpt_8601.pt"}
-config_file=${config_file:-"configs/bert_config_vocab30k.json"}
-vocab_file=${vocab_file:-"tokenizers/sp_raw_zh_30k.vocab"}
-vocab_model_file=${vocab_model_file:-"tokenizers/sp_raw_zh_30k.model"}
-tokenizer_type=${tokenizer_type:-"RawZh"}
-
+task_name=${task_name:-"nulls"}
 fewshot=${fewshot:-0}
 
-data_dir=${data_dir:-"datasets/$task_name"}
-out_dir=${out_dir:-"logs/${task_name}/wubi_zh"}
+init_checkpoint=${init_checkpoint:-""}
+config_file=${config_file:-""}
+vocab_file=${vocab_file:-""}
+vocab_model_file=${vocab_model_file:-""}
+tokenizer_type=${tokenizer_type:-""}
 
-seed=${seed:-2}
-epochs=${epochs:-2}
+convert_to_simplified=${convert_to_simplified:-""}
+two_level_embeddings=${two_level_embeddings:-""}
+debug=${debug:-0}
 
-python3 run_mrc.py \
-  --train_epochs=${epochs} \
-  --train_batch_size=32 \
-  --lr=3e-5 \
-  --gradient_accumulation_steps=2 \
-  --warmup_rate=0.1 \
-  --max_seq_length=512 \
-  --task_name=${task_name} \
-  --vocab_file=${vocab_file} \
-  --vocab_model_file=${vocab_model_file} \
-  --config_file=${config_file} \
-  --tokenizer_type=${tokenizer_type} \
-  --init_checkpoint=${init_checkpoint} \
-  --out_dir=${out_dir} \
-  --train_dir=${data_dir}/train_features.json \
-  --train_file=${data_dir}/train.json \
-  --dev_dir1=${data_dir}/dev_examples.json \
-  --dev_dir2=${data_dir}/dev_features.json \
-  --dev_file=${data_dir}/dev.json \
-  --checkpoint_dir=${out_dir} \
-  --seed=${seed} \
-  --do_train \
-  # --gpu_ids="0,1" \
-  # --init_restore_dir=$BERT_DIR/pytorch_model.pth \
+data_dir=${data_dir:-""}
 
+out_dir=${out_dir:-""}
+
+mode=${mode:-"train test"}
+seed=${seed:-""}
+epochs=${epochs:-"6"}
+
+mkdir -p $out_dir
+
+CMD="python3 "
+if [ "$task_name" = "drcd" ] ; then
+  CMD+="run_drcd.py "
+elif [ "$task_name" = "cmrc" ] ; then
+  CMD+="run_cmrc.py "
+else
+  echo "INVALID task_name: $task_name"
+fi
+
+if [[ $mode == *"train"* ]] ; then
+  CMD+="--do_train "
+fi
+
+if [[ $mode == *"test"* ]] ; then
+  CMD+="--do_test "
+fi
+
+if [ $two_level_embeddings -eq 1 ] ; then
+  CMD+="--two_level_embeddings "
+fi
+
+if [ $debug -eq 1 ] ; then
+  CMD+="--debug "
+fi
+
+# if [ $convert_to_simplified -eq 1 ] ; then
+#   CMD+="--convert_to_simplified "
+# fi
+
+CMD+="--task_name=${task_name} "
+# CMD+="--fewshot=${fewshot} "
+CMD+="--tokenizer_type=${tokenizer_type} "
+CMD+="--vocab_file=${vocab_file} "
+CMD+="--vocab_model_file=${vocab_model_file} "
+CMD+="--config_file=${config_file} "
+CMD+="--init_checkpoint=${init_checkpoint} "
+CMD+="--epochs=${epochs} "
+CMD+="--seed=${seed} "
+CMD+="--data_dir=${data_dir} "
+CMD+="--output_dir=${out_dir} "
+
+CMD+="--batch_size=32 "
+CMD+="--gradient_accumulation_steps=8 "
+CMD+="--lr=3e-5 "
+CMD+="--warmup_rate=0.05 "
+CMD+="--max_seq_length=512 "
+
+LOGFILE=$out_dir/$seed/logfile
+
+$CMD |& tee $LOGFILE
 
 # python test_mrc.py \
 #   --gpu_ids="0" \

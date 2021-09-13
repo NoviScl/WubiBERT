@@ -1,5 +1,9 @@
 #!/bin/bash
 
+mode=${mode:-"train train"}
+echo $mode
+exit
+
 set -e
 
 echo "Container nvidia build = " $NVIDIA_BUILD_ID
@@ -40,7 +44,6 @@ warmup_proportion=${11:-"0.1"}
 max_seq_length=${max_seq_length:-128}
 fewshot=${fewshot:-1}
 two_level_embeddings=${two_level_embeddings:-"0"}
-test_model=${test_model:-""}
 # precision=${14:-"fp16"}
 
 echo "mode = $mode"
@@ -97,12 +100,12 @@ CMD+="--init_checkpoint $init_checkpoint "
 CMD+="--config_file=$config_file "
 
 CMD+="--output_dir $out_dir "
-# CMD+="--data_dir $data_dir "
+CMD+="--data_dir $data_dir "
 CMD+="--train_dir $train_dir "
 CMD+="--dev_dir $dev_dir "
 CMD+="--test_dir $test_dir "
 
-# CMD+="--bert_model bert-tiny "
+CMD+="--bert_model bert-tiny "
 CMD+="--seed $seed "
 
 CMD+="--epochs $epochs "
@@ -113,9 +116,6 @@ CMD+="--gradient_accumulation_steps=$gradient_accumulation_steps "
 # CMD+="--max_steps $max_steps "
 CMD+="--fewshot $fewshot "
 CMD+="--do_lower_case "
-CMD+="--test_model $test_model "
 # CMD+="$use_fp16"
 
-LOGFILE=$out_dir/$seed/logfile
-
-$CMD |& tee $LOGFILE
+echo CMD

@@ -1141,6 +1141,7 @@ def _is_punctuation(char):
         return True
     return False
 
+
 ALL_TOKENIZERS = {
     "ConcatSep": ConcatSepTokenizer,
     "WubiZh": WubiZhTokenizer,
@@ -1148,5 +1149,8 @@ ALL_TOKENIZERS = {
     'CommonZh': CommonZhTokenizer,
     "BertZh": BertZhTokenizer,
     "Bert": BertTokenizer,
-    "BertHF": BertTokenizer
+    "BertHF": BertTokenizer,
+    'CommonZhNoIndex': CommonZhNoIndexTokenizer,
+    'Shuffled': ShuffledTokenizer,
+    'PinyinConcatWubi': PinyinConcatWubiTokenizer, 
 }

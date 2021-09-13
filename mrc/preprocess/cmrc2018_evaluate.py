@@ -98,9 +98,9 @@ def evaluate(ground_truth_file, prediction_file):
                 f1 += calc_f1_score(answers, prediction)
                 em += calc_em_score(answers, prediction)
 
-    f1_score = 100.0 * f1 / total_count
-    em_score = 100.0 * em / total_count
-    return f1_score, em_score, total_count, skip_count
+    f1 /= total_count
+    em /= total_count
+    return f1, em, total_count, skip_count
 
 
 def evaluate2(ground_truth_file, prediction_file):
@@ -189,11 +189,11 @@ def get_eval(original_file, prediction_file):
     F1, EM, TOTAL, SKIP = evaluate(ground_truth_file, prediction_file)
     AVG = (EM + F1) * 0.5
     output_result = OrderedDict()
-    output_result['AVERAGE'] = '%.3f' % AVG
-    output_result['F1'] = '%.3f' % F1
-    output_result['EM'] = '%.3f' % EM
-    output_result['TOTAL'] = TOTAL
-    output_result['SKIP'] = SKIP
+    output_result['avg'] = AVG
+    output_result['f1'] = F1
+    output_result['em'] = EM
+    output_result['total'] = TOTAL
+    output_result['skip'] = SKIP
 
     return output_result
 
