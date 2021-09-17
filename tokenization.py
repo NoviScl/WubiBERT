@@ -27,6 +27,7 @@ import pickle
 
 import sentencepiece as spm
 import jieba
+import oknlp
 
 from file_utils import cached_path
 
@@ -124,11 +125,11 @@ ch2stroke = "data/chinese_to_stroke.pkl"
 zhengma2ch = "data/zhengma_to_chinese.pkl"
 ch2zhengma = "data/chinese_to_zhengma.pkl"
 
-wubi2ch = "data/wubi_to_chinese.pkl"
-ch2wubi = "data/chinese_to_wubi.pkl"
+wubi2ch = "/home/sichenglei/WubiBERT/data/wubi_to_chinese.pkl"
+ch2wubi = "/home/sichenglei/WubiBERT/data/chinese_to_wubi.pkl"
 
-pinyin2ch = "data/pinyin_to_chinese.pkl"
-ch2pinyin = "data/chinese_to_pinyin.pkl"
+pinyin2ch = "/home/sichenglei/WubiBERT/data/pinyin_to_chinese.pkl"
+ch2pinyin = "/home/sichenglei/WubiBERT/data/chinese_to_pinyin.pkl"
 
 zhuyin2ch = "data/zhuyin_to_chinese.pkl"
 ch2zhuyin = "data/chinese_to_zhuyin.pkl"
@@ -149,7 +150,125 @@ CH2EN_PUNC = {f: t
 def load_dict(dict_path):
 	return pickle.load(open(dict_path, "rb"))
 
+## load some preprocessed dicts
+with open("/home/sichenglei/WubiBERT/byte_char_map.pkl", "rb") as f:
+    ch_chars = pickle.load(f)
+SEP = chr(ord('_')+50000)
+
+with open("/home/sichenglei/WubiBERT/random_index_map.pkl", 'rb') as f:
+    random_index_map = pickle.load(f)
+
 # map_dict = load_dict(CH2ENCODE)
+
+
+class ByteTokenizer(object):
+
+    def __init__(self, vocab_file, model_file, max_len=None,
+                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        if (not os.path.isfile(vocab_file)) or (not os.path.isfile(model_file)):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained ".format(vocab_file))
+
+        self.vocab = load_vocab_spm(vocab_file)
+        self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()])
+        self.max_len = max_len if max_len is not None else int(1e12)
+    
+    def convert_line(self, text):
+        out_line = "" 
+        for ch_char in text.strip():
+            c = bytes(ch_char, 'utf-8')
+            for byte_index in c:
+                # print (byte_index)
+                ch = ch_chars[byte_index]
+                out_line += ch 
+            out_line += SEP
+        return out_line
+    
+    def tokenize(self, text):
+        out_line = self.convert_line(text)
+        return self.spm_tokenizer.encode(out_line, out_type=str)
+
+    def convert_tokens_to_ids(self, tokens):
+        """Converts a sequence of tokens into ids using the vocab."""
+        ids = []
+        for token in tokens:
+            if token in self.vocab:
+                ids.append(self.vocab[token])
+            else:
+                ids.append(self.vocab['[UNK]'])
+        if len(ids) > self.max_len:
+            raise ValueError(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this BERT model ({} > {}). Running this"
+                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids):
+        """Converts a sequence of ids in wordpiece tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            tokens.append(self.ids_to_tokens[i])
+        return tokens
+    
+
+
+
+
+class RandomIndexTokenizer(object):
+
+    def __init__(self, vocab_file, model_file, max_len=None,
+                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        if (not os.path.isfile(vocab_file)) or (not os.path.isfile(model_file)):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained ".format(vocab_file))
+
+        self.vocab = load_vocab_spm(vocab_file)
+        self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()])
+        self.max_len = max_len if max_len is not None else int(1e12)
+    
+    def convert_line(self, text):
+        out_line = "" 
+        for ch_char in text.strip():
+            if ch_char in random_index_map:
+                out_line += str(random_index_map[ch_char])
+            else:
+                out_line += ch_char
+            out_line += SEP
+        return out_line
+    
+    def tokenize(self, text):
+        out_line = self.convert_line(text)
+        return self.spm_tokenizer.encode(out_line, out_type=str)
+
+    def convert_tokens_to_ids(self, tokens):
+        """Converts a sequence of tokens into ids using the vocab."""
+        ids = []
+        for token in tokens:
+            if token in self.vocab:
+                ids.append(self.vocab[token])
+            else:
+                ids.append(self.vocab['[UNK]'])
+        if len(ids) > self.max_len:
+            raise ValueError(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this BERT model ({} > {}). Running this"
+                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids):
+        """Converts a sequence of ids in wordpiece tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            tokens.append(self.ids_to_tokens[i])
+        return tokens
+    
+
 
 class BertZhTokenizer(object):
     "for bert_chinese_uncased_22675 tokenization"
@@ -1140,3 +1259,108 @@ def _is_punctuation(char):
     if cat.startswith("P"):
         return True
     return False
+
+
+
+class CWSNewTokenizer(object):
+
+    def __init__(self, vocab_file, model_file, cws_vocab_file, do_lower_case=True, max_len=None,
+                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        if (not os.path.isfile(vocab_file)) or (not os.path.isfile(model_file)):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained ".format(vocab_file))
+        if 'cangjie' in vocab_file:
+            self.map_dict = load_dict(ch2cangjie)
+        elif 'stroke' in vocab_file:
+            self.map_dict = load_dict(ch2stroke)
+        elif 'zhengma' in vocab_file:
+            self.map_dict = load_dict(ch2zhengma)
+        elif 'wubi' in vocab_file:
+            self.map_dict = load_dict(ch2wubi)
+        elif 'pinyin' in vocab_file:
+            self.map_dict = load_dict(ch2pinyin)
+        elif 'zhuyin' in vocab_file:
+            self.map_dict = load_dict(ch2zhuyin)
+
+        self.vocab = load_vocab_spm(vocab_file)
+        self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
+        self.cws_vocab = load_vocab(cws_vocab_file)
+        self.seg = oknlp.algorithm.cws.get_by_name('thulac')
+
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()])
+        # self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
+        #                                       never_split=never_split)
+        # self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
+        self.max_len = max_len if max_len is not None else int(1e12)
+    
+    def convert_line(self, text):
+        text = text.lower() #  always lowercasing
+        out_line = "" 
+        for ch_word in text:
+            ch_char = ch_word.strip()
+            if len(ch_char) == 0:
+                continue
+                
+            ## all convert to EN punctuations,
+            ## to avoid mixture of different punctuations
+            if ch_char in CH2EN_PUNC:
+                ch_char = CH2EN_PUNC[ch_char]
+
+            if ch_char in self.map_dict:
+                # add _ at the end of each ZH char as seperation
+                out_line += self.map_dict[ch_char].strip() + chr(ord('_')+50000) ## for sp_concat
+            else:
+                if ch_char in control_char:
+                    ch_char = chr(ord(ch_char)+50000)
+                out_line += ch_char  ## sp_concat
+        return out_line
+    
+    def tokenize(self, text):
+        words = self.seg([text])[0]
+        print (words)
+        tokens = []
+        for word in words:
+            if word in self.cws_vocab:
+                tokens.append(word)
+            else:
+                for char in word:
+                    if char in self.cws_vocab:
+                        tokens.append(char)
+                        continue
+                    if char in control_char:
+                        char = chr(ord('_')+50000) + chr(ord(char)+50000)
+                        tokens.append(char)
+                        continue
+                    char = self.map_dict[char] if char in self.map_dict else char
+                    tokens.extend([chr(ord('_')+50000) + x for x in self.spm_tokenizer.encode(char, out_type=str)])
+
+        return tokens
+
+    def convert_tokens_to_ids(self, tokens):
+        """Converts a sequence of tokens into ids using the vocab."""
+        ids = []
+        for token in tokens:
+            if token in self.cws_vocab:
+                ids.append(self.cws_vocab[token])
+            elif token[0] == chr(ord('_')+50000) and token[1:] in self.vocab:
+                ids.append(self.vocab[token[1:]]+len(self.cws_vocab))
+            else:
+                ids.append(self.vocab['[UNK]'])
+        if len(ids) > self.max_len:
+            raise ValueError(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this BERT model ({} > {}). Running this"
+                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids):
+        """Converts a sequence of ids in wordpiece tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            tokens.append(self.ids_to_tokens[i])
+        return tokens
+    
+    ## TODO: implement the detokenizer!
+    
