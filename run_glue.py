@@ -156,25 +156,9 @@ class GradientClipper:
 
 def parse_args(parser=argparse.ArgumentParser()):
     ## Required parameters
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        required=True,
-        help="The input data dir. Should contain the .tsv files (or other data "
-        "files) for the task.",
-    )
-    parser.add_argument('--train_dir', type=str, required=True)
-    parser.add_argument('--dev_dir', type=str, required=True)
-    parser.add_argument('--test_dir', type=str, required=True)
-    parser.add_argument(
-        "--bert_model",
-        type=str,
-        required=True,
-        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-        "bert-large-uncased, bert-base-cased, bert-large-cased, "
-        "bert-base-multilingual-uncased, bert-base-multilingual-cased, "
-        "bert-base-chinese, bert-tiny.",
-    )
+    parser.add_argument('--train_dir', type=str)
+    parser.add_argument('--dev_dir', type=str)
+    parser.add_argument('--test_dir', type=str)
     parser.add_argument(
         "--task_name",
         default=None,
@@ -267,16 +251,16 @@ def parse_args(parser=argparse.ArgumentParser()):
         default=1,
         help="Number of updates steps to accumulate before performing a "
         "backward/update pass.")
-    parser.add_argument(
-        '--fp16',
-        action='store_true',
-        help="Mixed precision training",
-    )
-    parser.add_argument(
-        '--amp',
-        action='store_true',
-        help="Mixed precision training",
-    )
+    # parser.add_argument(
+    #     '--fp16',
+    #     action='store_true',
+    #     help="Mixed precision training",
+    # )
+    # parser.add_argument(
+    #     '--amp',
+    #     action='store_true',
+    #     help="Mixed precision training",
+    # )
     parser.add_argument(
         '--loss_scale',
         type=float,
@@ -286,14 +270,6 @@ def parse_args(parser=argparse.ArgumentParser()):
         "0 (default value): dynamic loss scaling.\n"
         "Positive power of 2: static loss scaling value.\n",
     )
-    parser.add_argument('--server_ip',
-                        type=str,
-                        default='',
-                        help="Can be used for distant debugging.")
-    parser.add_argument('--server_port',
-                        type=str,
-                        default='',
-                        help="Can be used for distant debugging.")
     parser.add_argument('--tokenizer_type',
                         type=str,
                         default=None,
@@ -320,6 +296,7 @@ def parse_args(parser=argparse.ArgumentParser()):
                         help="Whether to save checkpoints")
     parser.add_argument('--two_level_embeddings', action="store_true")
     parser.add_argument('--fewshot', type=int, default=0)
+    parser.add_argument('--test_model', type=str)
     return parser.parse_args()
 
 
@@ -434,28 +411,10 @@ def gen_tensor_dataset(features, two_level_embeddings):
         )
 
 
-def get_train_features(data_dir, bert_model, max_seq_length, do_lower_case,
+def get_train_features(data_dir, max_seq_length, do_lower_case,
                        local_rank, train_batch_size,
                        gradient_accumulation_steps, epochs, tokenizer,
                        processor, is_fewshot=False, two_level_embeddings=False):
-    cached_train_features_file = os.path.join(
-        data_dir,
-        '{0}_{1}_{2}'.format(
-            list(filter(None, bert_model.split('/'))).pop(),
-            str(max_seq_length),
-            str(do_lower_case),
-        ),
-    )
-    train_features = None
-    # try:
-    #     with open(cached_train_features_file, "rb") as reader:
-    #         train_features = pickle.load(reader)
-    #     logger.info("Loaded pre-processed features from {}".format(
-    #         cached_train_features_file))
-    # except:
-    # logger.info("Did not find pre-processed features from {}".format(
-    #     cached_train_features_file))
-
     train_examples = processor.get_train_examples(data_dir)
         
     train_features, _ = convert_examples_to_features(
@@ -465,11 +424,6 @@ def get_train_features(data_dir, bert_model, max_seq_length, do_lower_case,
         tokenizer,
         two_level_embeddings=two_level_embeddings,
     )
-        # if is_main_process():
-        #     logger.info("  Saving train features into cached file %s",
-        #                 cached_train_features_file)
-        #     with open(cached_train_features_file, "wb") as writer:
-        #         pickle.dump(train_features, writer)
     return train_features
 
 
@@ -480,169 +434,6 @@ def dump_predictions(path, label_map, preds, examples):
     }
     with open(path, "w") as writer:
         json.dump(predictions, writer)
-
-
-def get_tokenization_result(args):
-    vocab_files = [
-        "sp_wubi_zh_30k_sep.vocab",
-        "sp_raw_zh_30k.vocab",
-        "sp_concat_30k_sep.vocab",
-        "bert_chinese_uncased_22675.vocab",
-    ]
-    tokenizer_types = [
-        "WubiZh",
-        "RawZh",
-        "ConcatSep",
-        "BertZh",
-    ]
-    vocab_model_files = [
-        "sp_wubi_zh_30k_sep.model",
-        "sp_raw_zh_30k.model",
-        "sp_concat_30k_sep.model",
-        "bert_chinese_uncased_22675.model",
-    ]
-    out_dirs = [
-        'wubi_zh',
-        'raw_zh',
-        'concat_sep',
-        'bert_zh_22675',
-    ]
-    TASK_NAME = 'csl'
-    DATA_DIR = os.path.join('datasets', TASK_NAME, 'split')
-
-    idx_a = 0
-    idx_b = 1
-
-    def get_preds_file(idx, seed):
-        return os.path.join('logs', TASK_NAME, out_dirs[idx], str(seed), 'predictions.json')
-
-    def get_tokenizer(idx):
-        vocab_file = os.path.join('tokenizers', vocab_files[idx])
-        vocab_model_file = os.path.join('tokenizers', vocab_model_files[idx])
-        return ALL_TOKENIZERS[tokenizer_types[idx]](vocab_file, vocab_model_file)
-
-    processor = PROCESSORS[TASK_NAME]()
-    test_examples = processor.get_test_examples(DATA_DIR)
-    tokenizers = [get_tokenizer(i) for i in range(4)]
-    preds_files = [get_preds_file(i, 2) for i in range(4)]
-    preds = [json.load(open(preds_files[i], 'r', encoding='utf8')) for i in range(4)]
-    # tokenizer_a = get_tokenizer(idx_a)
-    # tokenizer_b = get_tokenizer(idx_b)
-
-    # preds_file_a = get_preds_file(idx_a, 2)
-    # preds_file_b = get_preds_file(idx_b, 2)
-
-    # preds_a = json.load(open(preds_file_a, 'r', encoding='utf8'))
-    # preds_b = json.load(open(preds_file_b, 'r', encoding='utf8'))
-    
-    diff_ex = []
-    
-    num_diff = 0
-    for test_id in preds[0]:
-        if preds[idx_a][test_id] != preds[idx_b][test_id]:
-            num_diff += 1
-            idx = int(test_id[5:])
-            ex = test_examples[idx]
-            diff_ex.append(ex)
-            # print(ex)
-    
-    diff_ex = diff_ex[:100]
-
-    def tokenize_examples(examples, tokenizer, preds):
-        def _truncate_seq_pair(tokens_a, tokens_b, max_length):
-            """Truncates a sequence pair in place to the maximum length."""
-
-            # This is a simple heuristic which will always truncate the longer sequence
-            # one token at a time. This makes more sense than truncating an equal percent
-            # of tokens from each, since if one sequence is very short then each token
-            # that's truncated likely contains more information than a longer sequence.
-            while True:
-                total_length = len(tokens_a) + len(tokens_b)
-                if total_length <= max_length:
-                    break
-                if len(tokens_a) > len(tokens_b):
-                    tokens_a.pop()
-                else:
-                    tokens_b.pop()
-
-        result = []
-        for i, ex in enumerate(examples):
-            tokens_a = tokenizer.tokenize(ex.text_a)
-            tokens_b = tokenizer.tokenize(ex.text_b)
-            _truncate_seq_pair(tokens_a, tokens_b, 128 - 3)
-            tokens = ["[CLS]"] + tokens_a + ["[SEP]"] + tokens_b + ['[SEP]']
-            # input_ids = tokenizer.convert_tokens_to_ids(tokens)
-            
-            result.append({
-                'guid': ex.guid,
-                'label': preds[ex.guid],
-                'tokens': tokens,
-                # 'input_ids': input_ids,
-            })
-        return result
-
-    TARGET_DIR = os.path.join('tokenize_results', TASK_NAME, '2')
-    FILE_ORIG = os.path.join(TARGET_DIR, 'original.json')
-    # FILE_A = os.path.join(TARGET_DIR, tokenizer_types[idx_a] + '.json')
-    # FILE_B = os.path.join(TARGET_DIR, tokenizer_types[idx_b] + '.json')
-    files = [os.path.join(TARGET_DIR, tokenizer_types[i] + '.json') for i in range(4)]
-
-    os.makedirs(TARGET_DIR, exist_ok=True)
-    for file in [FILE_ORIG] + files:
-        with open(file, 'w') as f:
-            f.write('')
-
-    # result_a = tokenize_examples(diff_ex, tokenizer_a, preds_a)
-    # result_b = tokenize_examples(diff_ex, tokenizer_b, preds_b)
-    results = [tokenize_examples(diff_ex, tokenizers[i], preds[i]) for i in range(4)]
-    examples = [{
-        'guid': ex.guid,
-        'label': ex.label,
-        'text_a': ex.text_a,
-        'text_b': ex.text_b,
-    } for ex in diff_ex]
-
-    def dump_json(file, data):
-        with open(file, 'w') as f:
-            for d in data:
-                f.write(json.dumps(d, ensure_ascii=False))
-                f.write('\n')
-
-    # dump_json(FILE_A, result_a)
-    # dump_json(FILE_B, result_b)
-    for i in range(4):
-        dump_json(files[i], results[i])
-    dump_json(FILE_ORIG, examples)
-    exit(0)
-        
-
-    # for i in range(4):
-    #     tokenizer_type = tokenizer_types[i]
-    #     vocab_file = 'tokenizers/' + vocab_files[i]
-    #     vocab_model_file = 'tokenizers/' + vocab_model_files[i]
-    #     out_file = 'tokenize_results/' + vocab_files[i][:-6]
-    #     tokenizer = ALL_TOKENIZERS[tokenizer_type](vocab_file, vocab_model_file)
-    #     filename = args.data_dir + '/dev.json'
-    #     lines = open(filename, 'r').readlines()
-
-    #     lines = lines[:100]  # Pick the first 100
-        
-    #     examples = [json.loads(line) for line in lines]
-    #     tokenized = []
-    #     for ex in examples:
-    #         abst = ex['abst']
-    #         keywords = ' '.join(ex['keyword'])
-    #         abst = tokenizer.tokenize(abst)
-    #         keywords = tokenizer.tokenize(keywords)
-    #         tokenized.append({
-    #             'abst': abst,
-    #             'keywords': keywords,
-    #         })
-    #     with open(out_file + '.txt', 'w', encoding='utf-8') as f:
-    #         for t in tokenized:
-    #             f.write(json.dumps(t, ensure_ascii=False))
-    #             f.write('\n')
-    exit(0)
 
 
 def load_model(config_file, filename, num_labels):
@@ -712,7 +503,6 @@ def train(args):
     logger.info('Getting training features...')
     train_features = get_train_features(
         args.train_dir,
-        args.bert_model,
         args.max_seq_length,
         args.do_lower_case,
         args.local_rank,
@@ -746,20 +536,21 @@ def train(args):
         args.loss_scale,
         args.warmup_proportion,
         num_train_optimization_steps,
-        args.fp16,
+        # args.fp16,
+        False,
     )
 
-    if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError("Please install apex from "
-                              "https://www.github.com/nvidia/apex to use "
-                              "distributed and fp16 training.")
-        model = DDP(model)
-    elif n_gpu > 1:
-        pass
-        # model = torch.nn.DataParallel(model)
+    # if args.local_rank != -1:
+    #     try:
+    #         from apex.parallel import DistributedDataParallel as DDP
+    #     except ImportError:
+    #         raise ImportError("Please install apex from "
+    #                           "https://www.github.com/nvidia/apex to use "
+    #                           "distributed and fp16 training.")
+    #     model = DDP(model)
+    # elif n_gpu > 1:
+    #     pass
+    #     # model = torch.nn.DataParallel(model)
 
     loss_fct = torch.nn.CrossEntropyLoss()
 
@@ -830,20 +621,21 @@ def train(args):
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
-            if args.fp16:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                loss.backward()
+            # if args.fp16:
+            #     with amp.scale_loss(loss, optimizer) as scaled_loss:
+            #         scaled_loss.backward()
+            # else:
+            #     loss.backward()
+            loss.backward()
 
             total_train_loss += loss.item()
             num_train_examples += input_ids.size(0)
             num_train_steps += 1
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                if args.fp16:
-                    # modify learning rate with special warm up for BERT
-                    # which FusedAdam doesn't do
-                    scheduler.step()
+                # if args.fp16:
+                #     # modify learning rate with special warm up for BERT
+                #     # which FusedAdam doesn't do
+                #     scheduler.step()
 
                 optimizer.step()
                 optimizer.zero_grad()
@@ -983,16 +775,11 @@ def test(args):
     num_labels = len(processor.get_labels())
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
 
-    # Load best model
-    best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
-    logger.info('Loading model from "{}"...'.format(best_model_filename))
-    model = load_model(args.config_file, best_model_filename, num_labels)
-    logger.info('Loaded model from "{}"'.format(best_model_filename))
-    model.to(device)
-
     # Load test data
-    logger.info('Loading test data...')
+    logger.info('Loading test data from "{}"'.format(args.test_dir))
     examples = processor.get_test_examples(args.test_dir)
+    print(e.text_a for e in examples[:3])
+    exit()
     eval_features, label_map = convert_examples_to_features(
         examples,
         processor.get_labels(),
@@ -1000,6 +787,17 @@ def test(args):
         tokenizer,
         two_level_embeddings=args.two_level_embeddings,
     )
+
+    # Load best model
+    if args.test_model:
+        best_model_filename = args.test_model
+    else:
+        best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
+    logger.info('Loading model from "{}"...'.format(best_model_filename))
+    model = load_model(args.config_file, best_model_filename, num_labels)
+    logger.info('Loaded model from "{}"'.format(best_model_filename))
+    model.to(device)
+
 
     eval_data = gen_tensor_dataset(eval_features, two_level_embeddings=args.two_level_embeddings)
     # Run prediction for full data
@@ -1111,7 +909,7 @@ def main(args):
 
 
     
-    args.fp16 = args.fp16 or args.amp
+    # args.fp16 = args.fp16 or args.amp
 
     if not args.do_train and not args.do_eval and not args.do_test:
         raise ValueError("At least one of `do_train`, `do_eval` or "

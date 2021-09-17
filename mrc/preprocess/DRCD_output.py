@@ -87,7 +87,7 @@ def write_predictions_topk(config, all_examples, all_features, all_results, n_be
                 tok_tokens = feature['tokens'][pred.start_index:(pred.end_index + 1)]
                 orig_doc_start = feature['token_to_orig_map'][str(pred.start_index)]
                 orig_doc_end = feature['token_to_orig_map'][str(pred.end_index)]
-                orig_tokens = example['ori_doc_tokens'][orig_doc_start:(orig_doc_end + 1)]
+                orig_tokens = example['doc_tokens'][orig_doc_start:(orig_doc_end + 1)]
                 tok_text = "".join(tok_tokens)
 
                 # De-tokenize WordPieces that have been split off.
@@ -252,7 +252,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 tok_tokens = feature['tokens'][pred.start_index:(pred.end_index + 1)]
                 orig_doc_start = feature['token_to_orig_map'][str(pred.start_index)]
                 orig_doc_end = feature['token_to_orig_map'][str(pred.end_index)]
-                orig_tokens = example['ori_doc_tokens'][orig_doc_start:(orig_doc_end + 1)]
+                orig_tokens = example['doc_tokens'][orig_doc_start:(orig_doc_end + 1)]
                 tok_text = "".join(tok_tokens)
 
                 # De-tokenize WordPieces that have been split off.

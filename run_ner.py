@@ -51,7 +51,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TWO_LEVEL_EMBEDDINGS = True
-USE_TOKEN_EMBEDDINGS = False
+USE_TOKEN_EMBEDDINGS = True
 CLS_TOKEN = '[CLS]'
 SEP_TOKEN = '[SEP]'
 PAD_TOKEN = '[PAD]'

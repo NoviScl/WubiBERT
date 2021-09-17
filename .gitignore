@@ -13,3 +13,4 @@ tokenize_results/*
 
 wubi_results/*
 results/*
+checkpoints/*

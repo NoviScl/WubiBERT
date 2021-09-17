@@ -51,9 +51,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-DEBUG = False
-
-
 def evaluate(
     model,
     args,
@@ -297,12 +294,8 @@ def gen_examples_and_features(
     '''
 
     # TODO: Set to True when finished
-    use_example_cache = False
-    use_feature_cache = False
-
-    # if DEBUG:
-    #     use_example_cache = True
-    #     use_feature_cache = True
+    use_example_cache = True
+    use_feature_cache = True
 
     examples, features = None, None
     # Examples
@@ -319,21 +312,17 @@ def gen_examples_and_features(
         logger.info(f'mismatch: {mismatch}')
         logger.info(f'Generated {len(examples)} examples')
 
-        # if DEBUG:
-        #     print(examples[0])
-        #     exit()
-
         logger.info(f'Saving to "{file_examples}"...')
         # json.dump(examples, open(file_examples, 'w'), ensure_ascii=False)
         json_save_by_line(examples, file_examples)
-        logger.info(f'Loading from "{file_examples}"...')
-        examples = json_load_by_line(file_examples)
-        logger.info(f'Loaded {len(examples)} examples')
+        logger.info(f'Saved {len(examples)} examples')
+        # logger.info(f'Loading from "{file_examples}"...')
+        # examples = json_load_by_line(file_examples)
+        # logger.info(f'Loaded {len(examples)} examples')
 
     # Load or gen features
     if use_feature_cache and os.path.exists(file_features):
         logger.info('Found feature file, loading...')
-        # features = json.load(open(file_features, 'r'))
         features = json_load_by_line(file_features)
         logger.info(f'Loaded {len(features)} features')
     else:
@@ -346,20 +335,13 @@ def gen_examples_and_features(
             two_level_embeddings=two_level_embeddings,
         )
         logger.info(f'Generated {len(features)} features')
-        # logger.info(f'Example: {features[0]}')
         logger.info(f'Saving to "{file_features}"...')
-        # json.dump(features, open(file_features, 'w'), ensure_ascii=False)
         json_save_by_line(features, file_features)
+        logger.info(f'Saved {len(features)} features')
         logger.info('Found feature file, loading...')
         features = json_load_by_line(file_features)
         logger.info(f'Loaded {len(features)} features')
 
-    if DEBUG:
-        print(examples[0]['doc_tokens'])
-        print(features[0]['tokens'])
-        print(features[0]['long_tokens'])
-        exit()
-    
     return examples, features
 
 
@@ -410,7 +392,7 @@ def train(args):
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
     model = modeling.BertForQuestionAnswering(config)
-    # modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
     state_dict = torch.load(args.init_checkpoint, map_location='cpu')
     model.load_state_dict(state_dict['model'], strict=False)
     model.to(device)
@@ -451,17 +433,6 @@ def train(args):
     logger.info(f'  file_examples: {file_train_examples}')
     logger.info(f'  file_features: {file_train_features}')
 
-    # TODO: remove
-    if DEBUG:
-        dev_examples, dev_features = gen_examples_and_features(
-            file_dev,
-            file_dev_examples,
-            file_dev_features,
-            is_training=False,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            two_level_embeddings=args.two_level_embeddings)
-
     train_examples, train_features = gen_examples_and_features(
         file_train,
         file_train_examples,
@@ -487,11 +458,6 @@ def train(args):
     args.batch_size = int(args.batch_size / args.gradient_accumulation_steps)
     
     # TODO: for debugging, remove in the end
-    if DEBUG:
-        logger.info('truncating data...')
-        train_features = train_features[:500]
-        dev_examples = dev_examples[:500]
-        dev_features = dev_features[:500]
     # logger.info(f'num train_features: {len(train_features)}')
     # logger.info(f'num dev_examples: {len(dev_examples)}')
     # logger.info(f'num dev_features: {len(dev_features)}')
@@ -553,8 +519,9 @@ def train(args):
         with tqdm(total=train_steps_per_epoch, desc='Epoch %d' % (ep + 1), mininterval=5.0) as pbar:
             for step, batch in enumerate(train_dataloader):
                 batch = tuple(t.to(device) for t in batch)
+                expand_batch(batch, is_training=True, two_level_embeddings=args.two_level_embeddings)
                 (input_ids, input_mask, segment_ids, start_positions, end_positions,
-                 token_ids, pos_left, pos_right) = expand_batch(batch, is_training=True, two_level_embeddings=args.two_level_embeddings)
+                 token_ids, pos_left, pos_right) = batch
                 
                 # if ep == 0 and step == 0:
                 #     logger.info('Example input')
@@ -745,10 +712,6 @@ def test(args):
 def main():
     print('main() in run_cmrc.py')
     args = parse_args()
-
-    # TODO: remove
-    global DEBUG
-    DEBUG = args.debug
 
     if args.do_train:
         train(args)

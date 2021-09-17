@@ -14,11 +14,12 @@ two_level_embeddings=${two_level_embeddings:-""}
 debug=${debug:-0}
 
 data_dir=${data_dir:-""}
+
 out_dir=${out_dir:-""}
 
 mode=${mode:-"train test"}
 seed=${seed:-""}
-epochs=${epochs:-""}
+epochs=${epochs:-"6"}
 
 mkdir -p $out_dir
 

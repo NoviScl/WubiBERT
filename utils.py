@@ -87,6 +87,11 @@ def get_device():
 
 def output_dir_to_tokenizer_name(output_dir):
     tokenizer_types = [
+        'pinyin_concat_wubi',
+        'pinyin_shuffled',
+        'wubi_shuffled',
+        'pinyin_no_index',
+        'wubi_no_index',
         'cws_raw',
         'cws_wubi',
         'cws_zhuyin',
@@ -123,11 +128,16 @@ def json_save_by_line(data, filename):
             f.write('\n')
 
 
-def json_load_by_line(filename):
+def json_load_by_line(filename, n_lines=None):
     data = []
     with open(filename, 'r', encoding='utf8') as f:
         for line in f:
             data.append(json.loads(line))
+            # Break if loaded `n_lines` number of examples
+            if n_lines is not None:
+                assert n_lines > 0
+                if len(data) == n_lines:
+                    break
     return data
 
 

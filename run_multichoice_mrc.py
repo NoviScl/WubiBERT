@@ -299,7 +299,7 @@ def gen_train_features_json(
     shuffle=False):
     assert not os.path.exists(file_features), 'JSON features already exists'
     idiom_dict = json.load(open(file_idiom_dict))
-    logger.info('Generating...')
+    logger.info('Generating train features...')
     features = convert_examples_to_features(
         examples,
         tokenizer,
@@ -311,7 +311,7 @@ def gen_train_features_json(
         max_def_length=32,
         add_def=ADD_DEF)
     print(features[0])
-    logger.info(f'Generated {len(features)} features, saving...')
+    logger.info(f'Generated {len(features)} features, saving to "{file_features}"...')
     write_features_json(features, file_features)
 
 

@@ -391,76 +391,6 @@ def _convert_index(index, pos, M=None, is_start=True):
 			return index[front]
 
 
-# def read_cmrc_examples_twolevel(input_file):
-#     with open(input_file, 'r', encoding='utf8') as f:
-#         train_data = json.load(f)
-#     train_data = train_data['data']
-
-#     # to examples
-#     examples = []
-#     mis_match = 0
-#     for article in tqdm(train_data):
-#         for para in article['paragraphs']:
-#             context = para['context']
-#             for qas in para['qas']:
-#                 qid = qas['id']
-#                 ques_text = qas['question']
-#                 ans_text = qas['answers'][0]['text']
-
-#                 start_position_final = None
-#                 end_position_final = None
-#                 start_pos = qas['answers'][0]['answer_start']
-#                 end_pos = start_pos + len(ans_text) - 1
-
-#                 count_i = 0
-#                 start_position = qas['answers'][0]['answer_start']
-
-#                 end_position = start_position + len(ans_text) - 1
-#                 repeat_limit = 3  # TODO: Remove this
-#                 while context[start_position:end_position + 1] != ans_text and count_i < repeat_limit:
-#                     start_position -= 1
-#                     end_position -= 1
-#                     count_i += 1
-
-#                 while context[start_position] == " " or context[start_position] == "\t" or \
-#                         context[start_position] == "\r" or context[start_position] == "\n":
-#                     start_position += 1
-
-#                 start_position_final = char_to_word_offset[start_position]
-#                 end_position_final = char_to_word_offset[end_position]
-
-#                 if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
-#                     start_position_final += 1
-
-#                 actual_text = "".join(doc_tokens[start_position_final:(end_position_final + 1)])
-#                 cleaned_answer_text = "".join(tokenization.whitespace_tokenize(ans_text))
-
-#                 if actual_text != cleaned_answer_text:
-#                     print(actual_text, 'VS', cleaned_answer_text)
-#                     mis_match += 1
-
-#                 # if ans_text != context[start_pos:end_pos + 1]:
-#                 #     for i in range(-2, 3):
-#                 #         if context[start_pos + i : end_pos + 1 + i] == ans_text:
-#                 #             start_pos += i
-#                 #             end_pos += i
-#                 #             break
-#                 #     else:
-#                 #         mis_match += 1
-#                 #         print(ans_text, context[start_pos:end_pos + 1])
-
-#                 examples.append({
-#                     'doc_tokens': doc_tokens,
-#                     'orig_answer_text': ans_text,
-#                     'qid': qid,
-#                     'question': ques_text,
-#                     'answer': ans_text,
-#                     'start_position': start_pos,
-#                     'end_position': end_pos,
-#                 })
-#     return examples, mis_match
-
-
 def read_cmrc_examples(input_file, is_training, two_level_embeddings):
 	# if two_level_embeddings:
 	#     return read_cmrc_examples_twolevel(input_file, is_training)
@@ -626,10 +556,10 @@ def get_subchar_pos(tokens, subchars):
 def convert_examples_to_features_twolevel(
 	examples,
 	tokenizer,
-	is_training,
 	max_seq_length=512,
 	max_query_length=64,
-	doc_stride=128,):
+	doc_stride=128,
+ 	include_long_tokens=False):
 
 	is_training = True  # TODO: Just remove this parameter altogether.
 
@@ -961,7 +891,7 @@ def convert_examples_to_features_twolevel(
 					#    'index_subchar_to_char': index_subchar_to_char,
 					#    'subchar_is_max_context': subchar_is_max_context,
 					   }
-			if DEBUG:
+			if include_long_tokens:
 				feature['long_tokens'] = long_tokens
 			# print(token_ids)
 			# exit()
@@ -969,26 +899,24 @@ def convert_examples_to_features_twolevel(
 			unique_id += 1
 
 	return features
-	# print('features num:', len(features))
-	# json.dump(features, open(output_files[1], 'w'), ensure_ascii=False)
 
 
 def convert_examples_to_features(
 	examples,
 	tokenizer,
-	is_training,
 	max_seq_length=512,
 	max_query_length=64,
 	doc_stride=128,
-	two_level_embeddings=False):
+	two_level_embeddings=False,
+ 	include_long_tokens=False):
 	if two_level_embeddings:
 		return convert_examples_to_features_twolevel(
 			examples,
 			tokenizer,
-			is_training,
 			max_seq_length=max_seq_length,
 			max_query_length=max_query_length,
 			doc_stride=doc_stride,
+			include_long_tokens=include_long_tokens,
 		)
 
 	is_training = True # TODO: Just remove this parameter altogether?
@@ -1113,8 +1041,7 @@ def convert_examples_to_features(
 							 'start_position': start_position,
 							 'end_position': end_position})
 			unique_id += 1
-			# features.append(feature)
 
 	return features
-	# print('features num:', len(features))
-	# json.dump(features, open(output_files[1], 'w'), ensure_ascii=False)
+ 
+ 

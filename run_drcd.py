@@ -28,7 +28,8 @@ from optimization import BertAdam, warmup_linear, get_optimizer
 from schedulers import LinearWarmUpScheduler
 import utils
 from utils import (
-    mkdir, get_freer_gpu, get_device, output_dir_to_tokenizer_name
+    mkdir, get_freer_gpu, get_device, output_dir_to_tokenizer_name,
+    json_load_by_line, json_save_by_line
 )
 from run_pretraining import pretraining_dataset, WorkerInitObj
 
@@ -43,8 +44,6 @@ from mrc.preprocess.DRCD_preprocess import (
     read_drcd_examples, 
     convert_examples_to_features
 )
-# from mrc.preprocess.cmrc2018_output import write_predictions
-# from mrc.preprocess.cmrc2018_preprocess import json2features
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -77,12 +76,14 @@ def evaluate(
                                         #   "predictions_steps" + str(global_steps) + ".json")
     output_nbest_file = file_preds.replace('predictions_', 'nbest_')
 
-    all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
-    all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+    # all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
+    # all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
+    # all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
+    # all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index)
+    # dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index)
+    dataset = features_to_dataset(features, is_training=False,
+                                  two_level_embeddings=args.two_level_embeddings)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
     # dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
@@ -90,12 +91,21 @@ def evaluate(
     model.eval()
     all_results = []
     logger.info("Start evaluating")
-    for input_ids, input_mask, segment_ids, example_indices in tqdm(dataloader, desc="Evaluating", mininterval=5.0):
-        input_ids = input_ids.to(device)
-        input_mask = input_mask.to(device)
-        segment_ids = segment_ids.to(device)
+    for batch in tqdm(dataloader, desc="Evaluating", mininterval=5.0):
+        batch = tuple(t.to(device) for t in batch)  # Move to device
+        (input_ids, input_mask, segment_ids, example_indices,
+         token_ids, pos_left, pos_right) = expand_batch(batch, is_training=False, two_level_embeddings=args.two_level_embeddings)
+    
         with torch.no_grad():
-            batch_start_logits, batch_end_logits = model(input_ids, segment_ids, input_mask)
+            batch_start_logits, batch_end_logits = model(
+                input_ids, 
+                segment_ids, 
+                input_mask,
+                token_ids=token_ids, 
+                pos_left=pos_left,
+                pos_right=pos_right,
+                use_token_embeddings=args.two_level_embeddings)
+        #     batch_start_logits, batch_end_logits = model(input_ids, segment_ids, input_mask)
 
         for i, example_index in enumerate(example_indices):
             start_logits = batch_start_logits[i].detach().cpu().tolist()
@@ -105,7 +115,7 @@ def evaluate(
             all_results.append(RawResult(unique_id=unique_id,
                                          start_logits=start_logits,
                                          end_logits=end_logits))
-
+    logger.info(f'Writing predictions to "{args.n_best}" and "{file_preds}"')
     write_predictions(
         examples, 
         features, 
@@ -156,8 +166,86 @@ def parse_args():
     parser.add_argument("--do_train", action='store_true', default=False, help="Whether to run training.")
     parser.add_argument('--do_test', action='store_true', default=False, help='Whether to test.')
     parser.add_argument('--convert_to_simplified', action='store_true')
+    parser.add_argument('--two_level_embeddings', action='store_true')
 
     return parser.parse_args()
+
+
+def features_to_dataset(features, is_training, two_level_embeddings):
+    '''
+    Turn list of features into Tensor datasets
+    '''
+    all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
+    all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
+    if is_training:
+        all_start_positions = torch.tensor([f['start_position'] for f in features], dtype=torch.long)
+        all_end_positions = torch.tensor([f['end_position'] for f in features], dtype=torch.long)
+    else:
+        all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+    if not two_level_embeddings:
+        if is_training:
+            return TensorDataset(
+                all_input_ids,
+                all_input_mask,
+                all_segment_ids,
+                all_start_positions,
+                all_end_positions,
+            )
+        else:
+            return TensorDataset(
+                all_input_ids,
+                all_input_mask,
+                all_segment_ids,
+                all_example_index,
+            )
+    else:
+        all_token_ids = torch.tensor([f['token_ids'] for f in features], dtype=torch.long)
+        all_pos_left = torch.tensor([f['pos_left'] for f in features], dtype=torch.long)
+        all_pos_right = torch.tensor([f['pos_right'] for f in features], dtype=torch.long)
+        if is_training:
+            return TensorDataset(
+                all_input_ids, 
+                all_input_mask, 
+                all_segment_ids, 
+                all_start_positions, 
+                all_end_positions, 
+                all_token_ids,
+                all_pos_left,
+                all_pos_right,
+            )
+        else:
+            return TensorDataset(
+                all_input_ids, 
+                all_input_mask, 
+                all_segment_ids, 
+                all_example_index, 
+                all_token_ids,
+                all_pos_left,
+                all_pos_right,
+            )
+
+
+def expand_batch(batch, is_training, two_level_embeddings):
+    input_ids = batch[0]
+    input_mask = batch[1]
+    segment_ids = batch[2]
+    token_ids = None
+    pos_left = None
+    pos_right = None
+    if two_level_embeddings:
+        token_ids = batch[-3]
+        pos_left = batch[-2]
+        pos_right = batch[-1]
+    if is_training:
+        start_positions = batch[3]
+        end_positions = batch[4]
+        return (input_ids, input_mask, segment_ids, start_positions, end_positions,
+                token_ids, pos_left, pos_right)
+    else:
+        example_index = batch[3]
+        return (input_ids, input_mask, segment_ids, example_index,
+                token_ids, pos_left, pos_right)
 
 
 def expand_features(features):
@@ -204,6 +292,7 @@ def gen_examples_and_features(
     is_training,
     tokenizer,
     convert_to_simplified,
+    two_level_embeddings,
     max_seq_length,
     max_query_length=64,
     doc_stride=128,
@@ -214,41 +303,49 @@ def gen_examples_and_features(
         features: [dict]
     '''
 
+    use_example_cache = True
+    use_feature_cache = True
+
     examples, features = None, None
+    is_examples_new = False
     # Examples
-    if os.path.exists(file_examples):
+    if use_example_cache and os.path.exists(file_examples):
         logger.info('Found example file, loading...')
-        examples = json.load(open(file_examples, 'r'))
+        examples = json_load_by_line(file_examples)
         logger.info(f'Loaded {len(examples)} examples')
     else:
         logger.info('Example file not found, generating...')
         print(file_data)
-        examples, mismatch = read_drcd_examples(file_data, is_training, convert_to_simplified)
+        examples, mismatch = read_drcd_examples(
+            file_data, 
+            is_training, 
+            convert_to_simplified, 
+            two_level_embeddings=two_level_embeddings
+        )
         logger.info(f'num examples: {len(examples)}')
         logger.info(f'mismatch: {mismatch}')
         logger.info(f'Generated {len(examples)} examples')
         logger.info(f'Saving to "{file_examples}"...')
-        json.dump(examples, open(file_examples, 'w'), ensure_ascii=False)
+        json_save_by_line(examples, file_examples)
+        is_examples_new = True
     logger.info(f'Example 0: {examples[0]}')
     # Features
-    if os.path.exists(file_features):
+    if not is_examples_new and use_feature_cache and os.path.exists(file_features):
         logger.info('Found feature file, loading...')
-        features = json.load(open(file_features, 'r'))
+        features = json_load_by_line(file_features)
         logger.info(f'Loaded {len(features)} features')
     else:
         logger.info('Feature file not found, generating...')
         features = convert_examples_to_features(
             examples,
             tokenizer,
-            is_training=is_training,
             max_seq_length=max_seq_length,
-            # convert_to_simplified=False,
+            two_level_embeddings=two_level_embeddings,
         )
         logger.info(f'Generated {len(features)} features')
         logger.info(f'Example: {features[0]}')
         logger.info(f'Saving to "{file_features}"...')
-        json.dump(features, open(file_features, 'w'), ensure_ascii=False)
-        
+        json_save_by_line(features, file_features)
     return examples, features
 
 
@@ -265,25 +362,11 @@ def train(args):
     output_dir = os.path.join(args.output_dir, str(args.seed))
     filename_scores = os.path.join(output_dir, 'scores.txt')
     os.makedirs(output_dir, exist_ok=True)
-    # with open(filename_scores, 'w') as f:
-    #     f.write('epoch\ttrain_loss\tdev_acc\n')  # Column names
 
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
     filename_params = os.path.join(output_dir, 'params.json')
     json.dump(vars(args), open(filename_params, 'w'), indent=4)  # Save arguments
-
-    # # Determine task: DRCD or CMRC
-    # if args.task_name.lower() == 'drcd':
-    #     from mrc.preprocess.DRCD_output import write_predictions
-    #     from mrc.preprocess.DRCD_preprocess import (
-    #         json2features, read_drcd_examples, convert_examples_to_features
-    #     )
-    # elif args.task_name.lower() == 'cmrc':
-    #     from mrc.preprocess.cmrc2018_output import write_predictions
-    #     from mrc.preprocess.cmrc2018_preprocess import json2features
-    # else:
-    #     raise NotImplementedError('task_name must be in ["drcd", "cmrc"]')
 
     # Device
     device = get_device()  # Get gpu with most free RAM
@@ -299,7 +382,7 @@ def train(args):
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
     model = modeling.BertForQuestionAnswering(config)
-    # modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
     state_dict = torch.load(args.init_checkpoint, map_location='cpu')
     model.load_state_dict(state_dict['model'], strict=False)
     model.to(device)
@@ -336,17 +419,6 @@ def train(args):
         vocab_size=config.vocab_size,
         convert_to_simplified=args.convert_to_simplified)
     # Generate train examples and features
-    logger.info('Generating train data:')
-    logger.info(f'  file_examples: {file_train_examples}')
-    logger.info(f'  file_features: {file_train_features}')
-    train_examples, train_features = gen_examples_and_features(
-        file_train,
-        file_train_examples,
-        file_train_features,
-        is_training=True,
-        tokenizer=tokenizer,
-        convert_to_simplified=args.convert_to_simplified,
-        max_seq_length=args.max_seq_length)
     logger.info('Generating dev data:')
     logger.info(f'  file_examples: {file_dev_examples}')
     logger.info(f'  file_features: {file_dev_features}')
@@ -357,8 +429,21 @@ def train(args):
         is_training=False,
         tokenizer=tokenizer,
         convert_to_simplified=args.convert_to_simplified,
+        two_level_embeddings=args.two_level_embeddings,
         max_seq_length=args.max_seq_length)
-    del train_examples  # Only need examples for predictions
+    logger.info('Generating train data:')
+    logger.info(f'  file_examples: {file_train_examples}')
+    logger.info(f'  file_features: {file_train_features}')
+    train_examples, train_features = gen_examples_and_features(
+        file_train,
+        file_train_examples,
+        file_train_features,
+        is_training=True,
+        tokenizer=tokenizer,
+        convert_to_simplified=args.convert_to_simplified,
+        two_level_embeddings=args.two_level_embeddings,
+        max_seq_length=args.max_seq_length)
+    del train_examples  # Only need features for training
     logger.info('Done generating data')
 
     args.batch_size = int(args.batch_size / args.gradient_accumulation_steps)
@@ -401,21 +486,23 @@ def train(args):
         weight_decay_rate=args.weight_decay_rate)
 
 
-    # Decode features
-    (all_input_ids, 
-     all_input_mask, 
-     all_segment_ids, 
-     all_start_positions, 
-     all_end_positions) = expand_features(train_features)
+    # # Decode features
+    # (all_input_ids, 
+    #  all_input_mask, 
+    #  all_segment_ids, 
+    #  all_start_positions, 
+    #  all_end_positions) = expand_features(train_features)
 
-    seq_len = all_input_ids.shape[1]
-    # 样本长度不能超过bert的长度限制
-    assert seq_len <= config.max_position_embeddings
+    # seq_len = all_input_ids.shape[1]
+    # # 样本长度不能超过bert的长度限制
+    # assert seq_len <= config.max_position_embeddings
 
 
     # Train and evaluation
-    train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                               all_start_positions, all_end_positions)
+    # train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
+    #                            all_start_positions, all_end_positions)
+    train_data = features_to_dataset(train_features, is_training=True, 
+                                    two_level_embeddings=args.two_level_embeddings)
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
 
     logger.info('***** Training *****')
@@ -441,20 +528,16 @@ def train(args):
         with tqdm(total=train_steps_per_epoch, desc='Epoch %d' % (ep + 1), mininterval=5.0) as pbar:
             for step, batch in enumerate(train_dataloader):
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, start_positions, end_positions = batch
+                batch = expand_batch(batch, is_training=True, two_level_embeddings=args.two_level_embeddings)
+                (input_ids, input_mask, segment_ids, start_positions, end_positions,
+                 token_ids, pos_left, pos_right) = batch
                 
-                if ep == 0 and step == 0:
-                    logger.info('Example input')
-                    logger.info('input_ids')
-                    logger.info(input_ids)
-                    logger.info('input_mask')
-                    logger.info(input_mask)
-                    logger.info('start_positions')
-                    logger.info(start_positions)
-                    logger.info('end_positions')
-                    logger.info(end_positions)
+                # input_ids, input_mask, segment_ids, start_positions, end_positions = batch
 
-                loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
+                # loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
+                loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
+                             token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+                             use_token_embeddings=args.two_level_embeddings)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 total_loss = loss.item()
@@ -527,10 +610,6 @@ def train(args):
     logger.info(f'Mean F1: {mean_f1} Mean EM: {mean_acc}')
     logger.info(f'Max F1: {max_f1} Max EM: {max_acc}')
 
-    # with open(args.log_file, 'a') as aw:
-    #     aw.write('Mean(Best) F1:{}({})\n'.format(np.mean(f1_history), np.max(f1_history)))
-    #     aw.write('Mean(Best) EM:{}({})\n'.format(mean_acc, np.max(em_history)))
-
     # release the memory
     del model
     del optimizer
@@ -598,6 +677,7 @@ def test(args):
         is_training=False,
         tokenizer=tokenizer,
         convert_to_simplified=args.convert_to_simplified,
+        two_level_embeddings=args.two_level_embeddings,
         max_seq_length=args.max_seq_length)
     logger.info('Done generating data')
 
