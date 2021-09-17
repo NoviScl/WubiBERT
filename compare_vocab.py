@@ -5,12 +5,8 @@ import unicodedata
 import six
 from io import open
 import pickle
-<<<<<<< HEAD
-from tokenization import CommonZhTokenizer, BertZhTokenizer, RawZhTokenizer
-=======
 from tokenization import CommonZhTokenizer, BertZhTokenizer, RawZhTokenizer, CommonZhNoIndexTokenizer, PinyinConcatWubiTokenizer, ShuffledTokenizer
 from tokenization import CWSNewTokenizer, ByteTokenizer, RandomIndexTokenizer
->>>>>>> main
 
 import sentencepiece as spm
 
@@ -94,29 +90,6 @@ def load_vocab_spm(vocab_file):
 line = '1984'
 # # line = "尼采的著作对于宗教、道德、现代文化、哲学、以及科学等领域提出了广泛的批判和讨论。他的写作风格独特，经常使用格言和悖论的技巧。尼采对于后代哲学的发展影响很大，尤其是在存在主义与后现代主义上。"
 # line = '缙云氏有不才子，贪于饮食，冒于货贿，侵欲崇侈，不可盈厌；聚敛积实，不知纪极；不分孤寡，不恤穷匮。天下之民以比三凶，谓之饕餮。'
-<<<<<<< HEAD
-
-raw_zh = RawZhTokenizer(vocab_file='tokenizers/sp_raw_zh_30k.vocab', model_file='tokenizers/sp_raw_zh_30k.model')
-bert_zh = BertZhTokenizer(vocab_file='tokenizers/bert_chinese_uncased_22675.vocab')
-cangjie_zh = CommonZhTokenizer(vocab_file='tokenizers/cangjie_zh_22675.vocab', model_file='tokenizers/cangjie_zh_22675.model')
-stroke_zh = CommonZhTokenizer(vocab_file='tokenizers/stroke_zh_22675.vocab', model_file='tokenizers/stroke_zh_22675.model')
-wubi_zh = CommonZhTokenizer(vocab_file='tokenizers/wubi_zh_22675.vocab', model_file='tokenizers/wubi_zh_22675.model')
-zhengma_zh = CommonZhTokenizer(vocab_file='tokenizers/zhengma_zh_22675.vocab', model_file='tokenizers/zhengma_zh_22675.model')
-pinyin_zh = CommonZhTokenizer(vocab_file='tokenizers/pinyin_zh_22675.vocab', model_file='tokenizers/pinyin_zh_22675.model')
-zhuyin_zh = CommonZhTokenizer(vocab_file='tokenizers/zhuyin_zh_22675.vocab', model_file='tokenizers/zhuyin_zh_22675.model')
-
-print (line)
-print ("raw_zh: ", raw_zh.tokenize(line))
-print ("bert_zh: ", bert_zh.tokenize(line))
-print ("cangjie_zh: ", cangjie_zh.tokenize(line))
-print ("stroke_zh: ", stroke_zh.tokenize(line))
-print ("wubi_zh: ", wubi_zh.tokenize(line))
-print ("zhengma_zh: ", zhengma_zh.tokenize(line))
-print ("pinyin_zh: ", pinyin_zh.tokenize(line))
-print ("zhuyin_zh: ", zhuyin_zh.tokenize(line))
-
-
-=======
 # line = '缙云氏有不才子，谓之饕餮。'
 
 
@@ -178,7 +151,6 @@ for line in train:
 
 print (len(train))
 print (counter / len(train))
->>>>>>> main
 
 # ch2encode = load_dict(ch2pinyin)
 # print (ch2encode['哥'])
