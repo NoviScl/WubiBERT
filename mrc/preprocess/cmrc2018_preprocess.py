@@ -1,6 +1,7 @@
 import collections
 import json
 import os
+from copy import deepcopy
 
 from tqdm import tqdm
 
@@ -153,10 +154,6 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
 				if c != SPIECE_UNDERLINE:
 					char_to_word_offset.append(len(doc_tokens) - 1)
 
-			# print('doc_tokens')
-			# print(doc_tokens)
-			# exit(0)
-
 			for qas in para['qas']:
 				qid = qas['id']
 				ques_text = qas['question']
@@ -181,9 +178,6 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
 					start_position_final = char_to_word_offset[start_position]
 					end_position_final = char_to_word_offset[end_position]
 
-					# print('start_position_final')
-					# print(start_position_final)
-
 					if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
 						start_position_final += 1
 
@@ -192,12 +186,7 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
 
 					if actual_text != cleaned_answer_text:
 						print(actual_text, 'V.S', cleaned_answer_text)
-						# print(context)
-						# print(context_chs)
-						# print(doc_tokens)
-						# exit(0)
 						mis_match += 1
-						# ipdb.set_trace()
 
 				examples.append({'doc_tokens': doc_tokens,
 								 'orig_answer_text': ans_text,
@@ -241,8 +230,6 @@ def json2features(input_file, output_files, tokenizer, is_training=False, repeat
 				tok_end_position = orig_to_tok_index[example['end_position'] + 1] - 1
 			else:
 				tok_end_position = len(all_doc_tokens) - 1
-			# print('tok_position')
-			# print(tok_start_position, tok_end_position)
 			(tok_start_position, tok_end_position) = _improve_answer_span(
 				all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
 				example['orig_answer_text'])

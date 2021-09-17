@@ -32,10 +32,8 @@ from utils import (
 )
 from run_pretraining import pretraining_dataset, WorkerInitObj
 
-
 from mrc.google_albert_pytorch_modeling import AlbertConfig, AlbertForMRC
 from mrc.preprocess.cmrc2018_evaluate import get_eval
-# from mrc.pytorch_modeling import BertConfig, BertForQuestionAnswering, ALBertConfig, ALBertForQA
 from mrc.tools import official_tokenization, utils
 from mrc.preprocess.cmrc2018_output import write_predictions
 from mrc.preprocess.cmrc2018_preprocess import (
@@ -51,43 +49,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def evaluate(
-    model,
-    args,
-    file_data,
-    examples,
-    features,
-    device,
-    # global_steps, 
-    epoch,
-    output_dir,
-    ):
-
+def evaluate(model, args, file_data, examples, features, device, epoch, output_dir):
     logger.info("***** Eval *****")
-
     RawResult = collections.namedtuple(
         "RawResult",
         ["unique_id", "start_logits", "end_logits"])
     dir_preds = os.path.join(output_dir, 'predictions')
     os.makedirs(dir_preds, exist_ok=True)
     file_preds = os.path.join(dir_preds, 'predictions_' + str(epoch) + '.json')
-                                        #   "predictions_steps" + str(global_steps) + ".json")
     output_nbest_file = file_preds.replace('predictions_', 'nbest_')
-    
-    # TODO: remove
-    # features = features[:32]
-    # examples = examples[:32]
-
-    # all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
-    # all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
-    # all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
-    # all_token_ids = torch.tensor([f['token_ids'] for f in features], dtype=torch.long)
-    # all_pos_left = torch.tensor([f['pos_left'] for f in features], dtype=torch.long)
-    # all_pos_right = torch.tensor([f['pos_right'] for f in features], dtype=torch.long)
-    # all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-
-    # dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index,
-    #                         all_token_ids, all_pos_left, all_pos_right)
     
     all_examples_index = torch.arange(len(features), dtype=torch.long)
     dataset = features_to_dataset(features, is_training=False, two_level_embeddings=args.two_level_embeddings)
@@ -167,9 +137,10 @@ def parse_args():
     parser.add_argument('--init_checkpoint', type=str, required=True)
     parser.add_argument('--config_file', type=str, required=True)
     parser.add_argument('--data_dir', type=str, required=True)
+
     parser.add_argument('--output_dir', type=str, default='logs/temp')
-    parser.add_argument("--do_train", action='store_true', default=False, help="Whether to run training.")
-    parser.add_argument('--do_test', action='store_true', default=False, help='Whether to test.')
+    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
+    parser.add_argument('--do_test', action='store_true', help='Whether to test.')
     parser.add_argument('--two_level_embeddings', action='store_true')
     parser.add_argument('--debug', action='store_true')
 
@@ -293,7 +264,6 @@ def gen_examples_and_features(
         features: [dict]
     '''
 
-    # TODO: Set to True when finished
     use_example_cache = True
     use_feature_cache = True
 
@@ -313,12 +283,12 @@ def gen_examples_and_features(
         logger.info(f'Generated {len(examples)} examples')
 
         logger.info(f'Saving to "{file_examples}"...')
-        # json.dump(examples, open(file_examples, 'w'), ensure_ascii=False)
         json_save_by_line(examples, file_examples)
         logger.info(f'Saved {len(examples)} examples')
-        # logger.info(f'Loading from "{file_examples}"...')
-        # examples = json_load_by_line(file_examples)
-        # logger.info(f'Loaded {len(examples)} examples')
+        # Somehow, just saving will result in all empty evaluation
+        logger.info(f'Loading from "{file_examples}"...')
+        examples = json_load_by_line(file_examples)
+        logger.info(f'Loaded {len(examples)} examples')
 
     # Load or gen features
     if use_feature_cache and os.path.exists(file_features):
@@ -358,25 +328,11 @@ def train(args):
     output_dir = os.path.join(args.output_dir, str(args.seed))
     filename_scores = os.path.join(output_dir, 'scores.txt')
     os.makedirs(output_dir, exist_ok=True)
-    # with open(filename_scores, 'w') as f:
-    #     f.write('epoch\ttrain_loss\tdev_acc\n')  # Column names
 
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
     filename_params = os.path.join(output_dir, 'params.json')
     json.dump(vars(args), open(filename_params, 'w'), indent=4)  # Save arguments
-
-    # # Determine task: DRCD or CMRC
-    # if args.task_name.lower() == 'drcd':
-    #     from mrc.preprocess.DRCD_output import write_predictions
-    #     from mrc.preprocess.DRCD_preprocess import (
-    #         json2features, read_drcd_examples, convert_examples_to_features
-    #     )
-    # elif args.task_name.lower() == 'cmrc':
-    #     from mrc.preprocess.cmrc2018_output import write_predictions
-    #     from mrc.preprocess.cmrc2018_preprocess import json2features
-    # else:
-    #     raise NotImplementedError('task_name must be in ["drcd", "cmrc"]')
 
     # Device
     device = get_device()  # Get gpu with most free RAM
@@ -456,14 +412,8 @@ def train(args):
     logger.info('Done generating data')
 
     args.batch_size = int(args.batch_size / args.gradient_accumulation_steps)
-    
-    # TODO: for debugging, remove in the end
-    # logger.info(f'num train_features: {len(train_features)}')
-    # logger.info(f'num dev_examples: {len(dev_examples)}')
-    # logger.info(f'num dev_features: {len(dev_features)}')
 
     train_steps_per_epoch = len(train_features) // args.batch_size
-    # eval_steps = int(train_steps_per_epoch * args.eval_epochs)
     dev_steps_per_epoch = len(dev_features) // args.batch_size
     if len(train_features) % args.batch_size != 0:
         train_steps_per_epoch += 1
@@ -485,12 +435,6 @@ def train(args):
         warmup_rate=args.warmup_rate,
         max_grad_norm=args.clip_norm,
         weight_decay_rate=args.weight_decay_rate)
-
-
-    # seq_len = all_input_ids.shape[1]
-    # # 样本长度不能超过bert的长度限制
-    # assert seq_len <= config.max_position_embeddings
-
 
     # Train and evaluation
     train_data = features_to_dataset(train_features, is_training=True, two_level_embeddings=args.two_level_embeddings)
@@ -522,17 +466,6 @@ def train(args):
                 expand_batch(batch, is_training=True, two_level_embeddings=args.two_level_embeddings)
                 (input_ids, input_mask, segment_ids, start_positions, end_positions,
                  token_ids, pos_left, pos_right) = batch
-                
-                # if ep == 0 and step == 0:
-                #     logger.info('Example input')
-                #     logger.info('input_ids')
-                #     logger.info(input_ids)
-                #     logger.info('input_mask')
-                #     logger.info(input_mask)
-                #     logger.info('start_positions')
-                #     logger.info(start_positions)
-                #     logger.info('end_positions')
-                #     logger.info(end_positions)
 
                 loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
                              token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
@@ -576,7 +509,7 @@ def train(args):
         dev_f1_history.append(dev_f1)
         logger.info(f'train_loss = {train_loss}, dev_acc = {dev_acc}, dev_f1 = {dev_f1}')
 
-        
+        # Save all loss and acc
         with open(filename_scores, 'w') as f:
             f.write(f'epoch\ttrain_loss\tdev_acc\n')
             for i in range(ep+1):
@@ -608,10 +541,6 @@ def train(args):
 
     logger.info(f'Mean F1: {mean_f1} Mean EM: {mean_acc}')
     logger.info(f'Max F1: {max_f1} Max EM: {max_acc}')
-
-    # with open(args.log_file, 'a') as aw:
-    #     aw.write('Mean(Best) F1:{}({})\n'.format(np.mean(f1_history), np.max(f1_history)))
-    #     aw.write('Mean(Best) EM:{}({})\n'.format(mean_acc, np.max(em_history)))
 
     # release the memory
     del model

@@ -350,7 +350,6 @@ TOKENIZERS = [
 ]
 
 DO_TRAIN = True
-DO_TRAIN = False
 DO_TEST = True
 FEWSHOT = False
 TASKS = [

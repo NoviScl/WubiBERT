@@ -129,6 +129,8 @@ def json_save_by_line(data, filename):
 
 
 def json_load_by_line(filename, n_lines=None):
+    '''Load `n_lines` json dicts from file `filename`, where each line in the 
+    file is a json dict.'''
     data = []
     with open(filename, 'r', encoding='utf8') as f:
         for line in f:

@@ -36,9 +36,7 @@ from run_pretraining import pretraining_dataset, WorkerInitObj
 
 from mrc.google_albert_pytorch_modeling import AlbertConfig, AlbertForMRC
 from mrc.preprocess.cmrc2018_evaluate import get_eval
-# from mrc.pytorch_modeling import BertConfig, BertForQuestionAnswering, ALBertConfig, ALBertForQA
 from mrc.tools import official_tokenization, utils
-# from mrc.tools.pytorch_optimization import get_optimization, warmup_linear
 from mrc.preprocess.DRCD_output import write_predictions
 from mrc.preprocess.DRCD_preprocess import (
     read_drcd_examples, 
@@ -53,40 +51,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def evaluate(
-    model,
-    args,
-    file_data,
-    examples,
-    features,
-    device,
-    # global_steps, 
-    epoch,
-    output_dir,
-    ):
-
+def evaluate(model, args, file_data, examples, features, device, epoch, output_dir):
     logger.info("***** Eval *****")
-
     RawResult = collections.namedtuple(
         "RawResult",
         ["unique_id", "start_logits", "end_logits"])
     dir_preds = os.path.join(output_dir, 'predictions')
     os.makedirs(dir_preds, exist_ok=True)
     file_preds = os.path.join(dir_preds, 'predictions_' + str(epoch) + '.json')
-                                        #   "predictions_steps" + str(global_steps) + ".json")
     output_nbest_file = file_preds.replace('predictions_', 'nbest_')
-
-    # all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
-    # all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
-    # all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
-    # all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-
-    # dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index)
     dataset = features_to_dataset(features, is_training=False,
                                   two_level_embeddings=args.two_level_embeddings)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
-    # dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
-
 
     model.eval()
     all_results = []
@@ -105,7 +81,6 @@ def evaluate(
                 pos_left=pos_left,
                 pos_right=pos_right,
                 use_token_embeddings=args.two_level_embeddings)
-        #     batch_start_logits, batch_end_logits = model(input_ids, segment_ids, input_mask)
 
         for i, example_index in enumerate(example_indices):
             start_logits = batch_start_logits[i].detach().cpu().tolist()
@@ -128,7 +103,6 @@ def evaluate(
 
     file_truth = os.path.join(args.data_dir, file_data)
     res = get_eval(file_truth, file_preds)
-    # logger.info(json.dumps(res, indent=2))
     model.train()
     return res['em'], res['f1']
 
@@ -153,7 +127,6 @@ def parse_args():
     parser.add_argument('--save_best', type=bool, default=True)
     parser.add_argument('--max_seq_length', type=int, default=512)
 
-    # Required args
     parser.add_argument('--seed', type=int, required=True)
     parser.add_argument('--vocab_file', type=str, required=True)
     parser.add_argument('--task_name', type=str, required=True)
@@ -162,6 +135,7 @@ def parse_args():
     parser.add_argument('--init_checkpoint', type=str, required=True)
     parser.add_argument('--config_file', type=str, required=True)
     parser.add_argument('--data_dir', type=str, required=True)
+    
     parser.add_argument('--output_dir', type=str, default='logs/temp')
     parser.add_argument("--do_train", action='store_true', default=False, help="Whether to run training.")
     parser.add_argument('--do_test', action='store_true', default=False, help='Whether to test.')
@@ -171,62 +145,42 @@ def parse_args():
     return parser.parse_args()
 
 
-def features_to_dataset(features, is_training, two_level_embeddings):
+def features_to_dataset(features: [dict], is_training: bool, two_level_embeddings: bool):
     '''
     Turn list of features into Tensor datasets
     '''
-    all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
+    def get_long_tensor(key):
+        return torch.tensor([f[key] for f in features], dtype=torch.long)
+    all_input_ids = get_long_tensor('input_ids')
+    all_input_mask = get_long_tensor('input_mask')
+    all_segment_ids = get_long_tensor('segment_ids')
     if is_training:
-        all_start_positions = torch.tensor([f['start_position'] for f in features], dtype=torch.long)
-        all_end_positions = torch.tensor([f['end_position'] for f in features], dtype=torch.long)
+        all_start_positions = get_long_tensor('start_position')
+        all_end_positions = get_long_tensor('end_position')
     else:
         all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
     if not two_level_embeddings:
         if is_training:
-            return TensorDataset(
-                all_input_ids,
-                all_input_mask,
-                all_segment_ids,
-                all_start_positions,
-                all_end_positions,
-            )
+            return TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
+                                 all_start_positions, all_end_positions)
         else:
-            return TensorDataset(
-                all_input_ids,
-                all_input_mask,
-                all_segment_ids,
-                all_example_index,
-            )
+            return TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
+                                 all_example_index)
     else:
-        all_token_ids = torch.tensor([f['token_ids'] for f in features], dtype=torch.long)
-        all_pos_left = torch.tensor([f['pos_left'] for f in features], dtype=torch.long)
-        all_pos_right = torch.tensor([f['pos_right'] for f in features], dtype=torch.long)
+        all_token_ids = get_long_tensor('token_ids')
+        all_pos_left = get_long_tensor('pos_left')
+        all_pos_right = get_long_tensor('pos_right')
         if is_training:
-            return TensorDataset(
-                all_input_ids, 
-                all_input_mask, 
-                all_segment_ids, 
-                all_start_positions, 
-                all_end_positions, 
-                all_token_ids,
-                all_pos_left,
-                all_pos_right,
-            )
+            return TensorDataset(all_input_ids, all_input_mask, all_segment_ids, 
+                                 all_start_positions, all_end_positions, all_token_ids,
+                                 all_pos_left, all_pos_right)
         else:
-            return TensorDataset(
-                all_input_ids, 
-                all_input_mask, 
-                all_segment_ids, 
-                all_example_index, 
-                all_token_ids,
-                all_pos_left,
-                all_pos_right,
-            )
+            return TensorDataset(all_input_ids, all_input_mask, all_segment_ids, 
+                                 all_example_index, all_token_ids, all_pos_left,
+                                 all_pos_right)
 
 
-def expand_batch(batch, is_training, two_level_embeddings):
+def expand_batch(batch, is_training: bool, two_level_embeddings: bool):
     input_ids = batch[0]
     input_mask = batch[1]
     segment_ids = batch[2]
@@ -248,26 +202,9 @@ def expand_batch(batch, is_training, two_level_embeddings):
                 token_ids, pos_left, pos_right)
 
 
-def expand_features(features):
-    '''
-    Return:
-        all_input_ids, all_input_mask, all_segment_ids, all_start_positions, all_end_positions
-    '''
-    all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
-    all_start_positions = torch.tensor([f['start_position'] for f in features], dtype=torch.long)
-    all_end_positions = torch.tensor([f['end_position'] for f in features], dtype=torch.long)
-    return all_input_ids, all_input_mask, all_segment_ids, all_start_positions, all_end_positions
-
-
-def get_filename_examples_and_features(
-    data_type,
-    data_dir,
-    max_seq_length,
-    tokenizer_name,
-    vocab_size,
-    convert_to_simplified):
+def get_filename_examples_and_features(data_type: str, data_dir: str, max_seq_length: int,
+                                       tokenizer_name: str, vocab_size: int,
+                                       convert_to_simplified: bool):
     '''
     Return:
         example_file: str,
@@ -286,9 +223,9 @@ def get_filename_examples_and_features(
 
 
 def gen_examples_and_features(
-    file_data,
-    file_examples,
-    file_features,
+    file_data: str,
+    file_examples: str,
+    file_features: str,
     is_training,
     tokenizer,
     convert_to_simplified,
@@ -314,8 +251,7 @@ def gen_examples_and_features(
         examples = json_load_by_line(file_examples)
         logger.info(f'Loaded {len(examples)} examples')
     else:
-        logger.info('Example file not found, generating...')
-        print(file_data)
+        logger.info(f'Example file not found, generating from "{file_data}"...')
         examples, mismatch = read_drcd_examples(
             file_data, 
             is_training, 
@@ -447,18 +383,8 @@ def train(args):
     logger.info('Done generating data')
 
     args.batch_size = int(args.batch_size / args.gradient_accumulation_steps)
-    
-    # TODO: for debugging, remove in the end
-    # print('truncating data...')
-    # train_features = train_features[:100]
-    # dev_examples = dev_examples[:100]
-    # dev_features = dev_features[:100]
-    # print('num train_features:', len(train_features))
-    # print('num dev_examples:', len(dev_examples))
-    # print('num dev_features:', len(dev_features))
 
     train_steps_per_epoch = len(train_features) // args.batch_size
-    # eval_steps = int(train_steps_per_epoch * args.eval_epochs)
     dev_steps_per_epoch = len(dev_features) // args.batch_size
     if len(train_features) % args.batch_size != 0:
         train_steps_per_epoch += 1
@@ -470,11 +396,6 @@ def train(args):
     logger.info('total steps: ' + str(total_steps))
     logger.info('warmup steps: ' + str(int(args.warmup_rate * total_steps)))
 
-
-    # if n_gpu > 1:
-    #     pass
-    #     model = torch.nn.DataParallel(model)
-
     optimizer = get_optimizer(
         model=model,
         float16=args.fp16,
@@ -484,23 +405,7 @@ def train(args):
         warmup_rate=args.warmup_rate,
         max_grad_norm=args.clip_norm,
         weight_decay_rate=args.weight_decay_rate)
-
-
-    # # Decode features
-    # (all_input_ids, 
-    #  all_input_mask, 
-    #  all_segment_ids, 
-    #  all_start_positions, 
-    #  all_end_positions) = expand_features(train_features)
-
-    # seq_len = all_input_ids.shape[1]
-    # # 样本长度不能超过bert的长度限制
-    # assert seq_len <= config.max_position_embeddings
-
-
     # Train and evaluation
-    # train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-    #                            all_start_positions, all_end_positions)
     train_data = features_to_dataset(train_features, is_training=True, 
                                     two_level_embeddings=args.two_level_embeddings)
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
@@ -531,10 +436,6 @@ def train(args):
                 batch = expand_batch(batch, is_training=True, two_level_embeddings=args.two_level_embeddings)
                 (input_ids, input_mask, segment_ids, start_positions, end_positions,
                  token_ids, pos_left, pos_right) = batch
-                
-                # input_ids, input_mask, segment_ids, start_positions, end_positions = batch
-
-                # loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
                 loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
                              token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
                              use_token_embeddings=args.two_level_embeddings)
@@ -557,7 +458,6 @@ def train(args):
                 num_train_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     optimizer.step()
-                    # model.zero_grad()
                     optimizer.zero_grad()
                     global_steps += 1
 
@@ -616,7 +516,7 @@ def train(args):
     torch.cuda.empty_cache()
 
     print('Training finished')
-    
+
 
 def test(args):
     logger.info('Test')

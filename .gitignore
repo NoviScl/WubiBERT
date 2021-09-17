@@ -1,16 +1,13 @@
 **/__pycache__/**
 __pycache__/
 **pyc
+
 datasets/*
-
-slurm_output/*
-slurm-*.out
-
 logs/*
 results/*
 tokenize_results/*
-*.pkl
-
-wubi_results/*
-results/*
 checkpoints/*
+
+# Slurm
+slurm_output/*
+slurm-*.out

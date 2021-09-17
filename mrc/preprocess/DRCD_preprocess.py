@@ -317,9 +317,7 @@ def read_drcd_examples(input_file, is_training, convert_to_simplified, two_level
         return "".join(output)
 
     def is_whitespace(c):
-        if (c == " " or c == "\t" or c == "\r" or c == "\n" 
-            or ord(c) == 0x202F or c == SPIECE_UNDERLINE or c == '\u3000'
-            or c == '\u2009'):
+        if c in [" ", "\t", "\r", "\n", SPIECE_UNDERLINE, '\u3000', '\u2009'] or ord(c) == 0x202F:
             return True
         return False
 
@@ -365,21 +363,7 @@ def read_drcd_examples(input_file, is_training, convert_to_simplified, two_level
                 if c != SPIECE_UNDERLINE:
                     char_to_word_offset.append(len(doc_tokens) - 1)
 
-            # context_fhs = _tokenize_chinese_chars(para['context'])
-            # for ic, c in enumerate(context_chs):
-            #     if is_whitespace(c):
-            #         prev_is_whitespace = True
-            #     else:
-            #         if prev_is_whitespace:
-            #             doc_tokens.append(c)
-            #             ori_doc_tokens.append(context_fhs[ic])
-            #         else:
-            #             doc_tokens[-1] += c
-            #             ori_doc_tokens[-1] += context_fhs[ic]
-            #         prev_is_whitespace = False
-            #     if c != SPIECE_UNDERLINE:
-            #         char_to_word_offset.append(len(doc_tokens) - 1)
-            # assert len(context_chs) == len(context_fhs)
+            # Generate one example for each question
             for qas in para['qas']:
                 qid = qas['id']
                 ques_text = qas['question']
@@ -390,29 +374,27 @@ def read_drcd_examples(input_file, is_training, convert_to_simplified, two_level
                 start_position_final = None
                 end_position_final = None
 
-                # if is_training:
-                if True:
-                    start_position = qas['answers'][0]['answer_start']
-                    end_position = start_position + len(ans_text) - 1
+                # Get start and end position
+                start_position = qas['answers'][0]['answer_start']
+                end_position = start_position + len(ans_text) - 1
 
-                    while context[start_position] == " " or context[start_position] == "\t" or \
-                            context[start_position] == "\r" or context[start_position] == "\n":
-                        start_position += 1
+                while context[start_position] == " " or context[start_position] == "\t" or \
+                        context[start_position] == "\r" or context[start_position] == "\n":
+                    start_position += 1
 
-                    start_position_final = char_to_word_offset[start_position]
-                    end_position_final = char_to_word_offset[end_position]
+                start_position_final = char_to_word_offset[start_position]
+                end_position_final = char_to_word_offset[end_position]
 
-                    if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
-                        start_position_final += 1
-                    actual_text = "".join(doc_tokens[start_position_final:(end_position_final + 1)])
-                    cleaned_answer_text = "".join(whitespace_tokenize(ans_text))
+                if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
+                    start_position_final += 1
+                actual_text = "".join(doc_tokens[start_position_final:(end_position_final + 1)])
+                cleaned_answer_text = "".join(whitespace_tokenize(ans_text))
 
-                    if actual_text != cleaned_answer_text:
-                        print(actual_text, 'V.S', cleaned_answer_text)
-                        mis_match += 1
+                if actual_text != cleaned_answer_text:
+                    print(actual_text, 'V.S', cleaned_answer_text)
+                    mis_match += 1
 
                 examples.append({'doc_tokens': doc_tokens,
-                                #  'ori_doc_tokens': ori_doc_tokens,
                                  'orig_answer_text': ans_text,
                                  'qid': qid,
                                  'question': ques_text,
@@ -420,10 +402,6 @@ def read_drcd_examples(input_file, is_training, convert_to_simplified, two_level
                                  'start_position': start_position_final,
                                  'end_position': end_position_final})
 
-    # print('examples num:', len(examples))
-    # print('mis match:', mis_match)
-    # os.makedirs('/'.join(cache_file.split('/')[0:-1]), exist_ok=True)
-    # json.dump(examples, open(output_files[0], 'w'))
     return examples, mis_match
 
 

@@ -4,7 +4,6 @@ import os
 import pickle
 from tokenization import CommonZhNoIndexTokenizer
 import string
-random.seed(2021)
 
 tokenizer = CommonZhNoIndexTokenizer('tokenizers/wubi_no_index_22675.vocab', 
                                      'tokenizers/wubi_no_index_22675.model')
