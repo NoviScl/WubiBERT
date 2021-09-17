@@ -83,6 +83,7 @@ def _add_noise(sent, ratio, ch_2_enc, same_dict):
                 tmp.remove(c) ## remove itself
                 newc = random.choice(tmp)
             except:
+<<<<<<< HEAD
                 newc = c
         else:
             newc = c
@@ -113,10 +114,68 @@ def change_pinyin(orig_data, ratio=1):
             eg[key] = newsent
             changed_chars += changed
             total_chars += total
+=======
+                enc = None
+            if random.random() < ratio:
+                try:
+                    tmp = same_dict_pinyin[enc][:]
+                    tmp.remove(c) ## remove itself
+                    newc = random.choice(tmp)
+                except:
+                    newc = c
+            else:
+                newc = c
+            if newc != c:
+                changed_chars += 1
+            total_chars += 1
+            newsent += newc
+            if c in ch2pinyin:
+                enc_orig = ''.join([i for i in ch2pinyin[c] if not i.isdigit()])
+                enc_new = ''.join([i for i in ch2pinyin[newc] if not i.isdigit()])
+                if enc_orig != enc_new:
+                    print (enc_orig, enc_new)
+        eg["sentence"] = newsent
+
+        newsent = ""
+        for c in eg["keywords"]:
+            try:
+                enc = ch2pinyin[c]
+                enc = ''.join([i for i in enc if not i.isdigit()])
+            except:
+                enc = None
+            if random.random() < ratio:
+                try:
+                    tmp = same_dict_pinyin[enc][:]
+                    tmp.remove(c) ## remove itself
+                    newc = random.choice(tmp)
+                except:
+                    newc = c
+            else:
+                newc = c
+            if newc != c:
+                changed_chars += 1
+            total_chars += 1
+            newsent += newc
+            if c in ch2pinyin:
+                enc_orig = ''.join([i for i in ch2pinyin[c] if not i.isdigit()])
+                enc_new = ''.join([i for i in ch2pinyin[newc] if not i.isdigit()])
+                if enc_orig != enc_new:
+                    print (enc_orig, enc_new)
+        eg["keywords"] = newsent
+>>>>>>> main
         data.append(eg)
     print ("changed ratio: ", changed_chars / total_chars)
     return data
 
+<<<<<<< HEAD
+=======
+data = change_pinyin(ratio=1.0)
+with open('noisy_data/tnews/phonetic_test.json', 'w+') as f:
+    for eg in data:
+        json.dump(eg, f, ensure_ascii=False)
+        f.write('\n')
+
+>>>>>>> main
 
 def change_wubi(orig_data, ratio=1):
     random.seed(2021)
@@ -125,6 +184,7 @@ def change_wubi(orig_data, ratio=1):
     changed_chars = 0
     total_chars = 0
     for eg in orig_data:
+<<<<<<< HEAD
         for key in TEXT_KEYS:
             newsent, changed, total = _add_noise(eg[key], ratio, ch2wubi, same_dict_wubi)
             changed_chars += changed
@@ -136,6 +196,67 @@ def change_wubi(orig_data, ratio=1):
                 print (tokenizer.tokenize(newsent))
                 print ()
             eg[key] = newsent
+=======
+        newsent = ""
+        for c in eg["sentence"]:
+            try:
+                enc = ch2wubi[c]
+                enc = ''.join([i for i in enc if not i.isdigit()])
+            except:
+                enc = None
+            if random.random() < ratio:
+                ## first try same encoding substitute
+                if enc in same_dict_wubi and len(same_dict_wubi[enc]) > 1:
+                    tmp = same_dict_wubi[enc][:]
+                    tmp.remove(c) ## remove itself
+                    newc = random.choice(tmp)
+                # elif c in wubi_sim_dict:
+                #     newc = random.choice(wubi_sim_dict[c])
+                else:
+                    newc = c
+            else:
+                newc = c
+            if newc != c:
+                changed_chars += 1
+            total_chars += 1
+            newsent += newc
+            if c in ch2wubi:
+                enc_orig = ''.join([i for i in ch2wubi[c] if not i.isdigit()])
+                enc_new = ''.join([i for i in ch2wubi[newc] if not i.isdigit()])
+                if enc_orig != enc_new:
+                    print (enc_orig, enc_new)
+        eg["sentence"] = newsent
+
+        newsent = ""
+        for c in eg["keywords"]:
+            try:
+                enc = ch2wubi[c]
+                enc = ''.join([i for i in enc if not i.isdigit()])
+            except:
+                enc = None
+            if random.random() < ratio:
+                ## first try same encoding substitute
+                if enc in same_dict_wubi and len(same_dict_wubi[enc]) > 1:
+                    tmp = same_dict_wubi[enc][:]
+                    tmp.remove(c) ## remove itself
+                    newc = random.choice(tmp)
+                # elif c in wubi_sim_dict:
+                #     newc = random.choice(wubi_sim_dict[c])
+                else:
+                    newc = c
+            else:
+                newc = c
+            if newc != c:
+                changed_chars += 1
+            total_chars += 1
+            newsent += newc
+            if c in ch2wubi:
+                enc_orig = ''.join([i for i in ch2wubi[c] if not i.isdigit()])
+                enc_new = ''.join([i for i in ch2wubi[newc] if not i.isdigit()])
+                if enc_orig != enc_new:
+                    print (enc_orig, enc_new)
+        eg["keywords"] = newsent
+>>>>>>> main
         data.append(eg)
     print ("changed ratio: ", changed_chars / total_chars)
     return data

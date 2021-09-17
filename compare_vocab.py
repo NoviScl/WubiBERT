@@ -5,7 +5,12 @@ import unicodedata
 import six
 from io import open
 import pickle
+<<<<<<< HEAD
 from tokenization import CommonZhTokenizer, BertZhTokenizer, RawZhTokenizer
+=======
+from tokenization import CommonZhTokenizer, BertZhTokenizer, RawZhTokenizer, CommonZhNoIndexTokenizer, PinyinConcatWubiTokenizer, ShuffledTokenizer
+from tokenization import CWSNewTokenizer, ByteTokenizer, RandomIndexTokenizer
+>>>>>>> main
 
 import sentencepiece as spm
 
@@ -89,6 +94,7 @@ def load_vocab_spm(vocab_file):
 line = '1984'
 # # line = "尼采的著作对于宗教、道德、现代文化、哲学、以及科学等领域提出了广泛的批判和讨论。他的写作风格独特，经常使用格言和悖论的技巧。尼采对于后代哲学的发展影响很大，尤其是在存在主义与后现代主义上。"
 # line = '缙云氏有不才子，贪于饮食，冒于货贿，侵欲崇侈，不可盈厌；聚敛积实，不知纪极；不分孤寡，不恤穷匮。天下之民以比三凶，谓之饕餮。'
+<<<<<<< HEAD
 
 raw_zh = RawZhTokenizer(vocab_file='tokenizers/sp_raw_zh_30k.vocab', model_file='tokenizers/sp_raw_zh_30k.model')
 bert_zh = BertZhTokenizer(vocab_file='tokenizers/bert_chinese_uncased_22675.vocab')
@@ -110,6 +116,69 @@ print ("pinyin_zh: ", pinyin_zh.tokenize(line))
 print ("zhuyin_zh: ", zhuyin_zh.tokenize(line))
 
 
+=======
+# line = '缙云氏有不才子，谓之饕餮。'
+
+
+
+# raw_zh = RawZhTokenizer(vocab_file='tokenizers/sp_raw_zh_30k.vocab', model_file='tokenizers/sp_raw_zh_30k.model')
+# bert_zh = BertZhTokenizer(vocab_file='tokenizers/bert_chinese_uncased_22675.vocab')
+tokenizer = CommonZhTokenizer(vocab_file='tokenizers/wubi_bpe_5k.vocab', model_file='tokenizers/wubi_bpe_5k.model')
+# stroke_zh = CommonZhTokenizer(vocab_file='tokenizers/stroke_zh_22675.vocab', model_file='tokenizers/stroke_zh_22675.model')
+# wubi_zh = CommonZhTokenizer(vocab_file='tokenizers/wubi_zh_22675.vocab', model_file='tokenizers/wubi_zh_22675.model')
+# zhengma_zh = CommonZhTokenizer(vocab_file='tokenizers/zhengma_zh_22675.vocab', model_file='tokenizers/zhengma_zh_22675.model')
+# pinyin_zh = CommonZhTokenizer(vocab_file='tokenizers/pinyin_zh_22675.vocab', model_file='tokenizers/pinyin_zh_22675.model')
+# zhuyin_zh = CommonZhTokenizer(vocab_file='tokenizers/zhuyin_zh_22675.vocab', model_file='tokenizers/zhuyin_zh_22675.model')
+
+# wubi_no_index = CommonZhNoIndexTokenizer(vocab_file='tokenizers/wubi_no_index_22675.vocab', model_file='tokenizers/wubi_no_index_22675.model')
+# pinyin_no_index = CommonZhNoIndexTokenizer(vocab_file='tokenizers/pinyin_no_index_22675.vocab', model_file='tokenizers/pinyin_no_index_22675.model')
+# shuffled_wubi = ShuffledTokenizer(vocab_file='tokenizers/shuffled_wubi_22675.vocab', model_file='tokenizers/shuffled_wubi_22675.model')
+# shuffled_pinyin = ShuffledTokenizer(vocab_file='tokenizers/shuffled_pinyin_22675.vocab', model_file='tokenizers/shuffled_pinyin_22675.model')
+# pinyin_concat_wubi = PinyinConcatWubiTokenizer(vocab_file='tokenizers/pinyin_concat_wubi_22675.vocab', model_file='tokenizers/pinyin_concat_wubi_22675.model')
+# tokenizer = CWSNewTokenizer('cws_tokenizers/wubi_cws_22675_80.vocab', 'cws_tokenizers/wubi_cws_22675_80.model', 'cws_tokenizers/wubi_cws_22675_80.cws_vocab')
+# tokenizer = RandomIndexTokenizer('tokenizers/random_index_22675.vocab', 'tokenizers/random_index_22675.model')
+# tokenizer = ByteTokenizer('tokenizers/byte_22675.vocab', 'tokenizers/byte_22675.model')
+# tokenizer = RawZhTokenizer(vocab_file='tokenizers/orig_bpe_5k.vocab', model_file='tokenizers/orig_bpe_5k.model')
+
+
+with open("/home/sichenglei/CLUE/iflytek/train.json", "r") as f:
+    train = f.readlines()
+
+counter = 0
+# train = ['如今把事实指出，愈使魑魅魍魉无所遁形于光天化日之下了！', '缙云氏有不才子，谓之饕餮。']
+for line in train:
+    line = eval(line.strip())
+    line = line['sentence']
+
+    # print (line)
+    # print (tokenizer.tokenize(line))
+
+    counter += len(tokenizer.tokenize(line))
+
+    # print (line)
+    # print ("raw_zh: ", raw_zh.tokenize(line))
+    # print ("bert_zh: ", bert_zh.tokenize(line))
+    # print ("cangjie_zh: ", cangjie_zh.tokenize(line))
+    # print ("stroke_zh: ", stroke_zh.tokenize(line))
+    # print ("wubi_zh: ", wubi_zh.tokenize(line))
+    # print ("pinyin_zh: ", pinyin_zh.tokenize(line))
+    # print ()
+    # print ("wubi_no_index:", wubi_no_index.tokenize(line))
+    # print ()
+    # print ("shuffled_wubi:", shuffled_wubi.tokenize(line))
+    # print ("shuffled_pinyin:", shuffled_pinyin.tokenize(line))
+    # print ()
+    # # print ("zhengma_zh: ", zhengma_zh.tokenize(line))
+    # print ("pinyin_zh: ", pinyin_zh.tokenize(line))
+    # print ()
+    # print ("pinyin_no_index:", pinyin_no_index.tokenize(line))
+    # print ()
+    # print ("pinyin_concat_wubi:", pinyin_concat_wubi.tokenize(line))
+    # print ("zhuyin_zh: ", zhuyin_zh.tokenize(line))
+
+print (len(train))
+print (counter / len(train))
+>>>>>>> main
 
 # ch2encode = load_dict(ch2pinyin)
 # print (ch2encode['哥'])
