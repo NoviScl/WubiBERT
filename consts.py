@@ -15,6 +15,12 @@ VOCAB_FILES = {
     'pinyin_concat_wubi': 'tokenizers/pinyin_concat_wubi_22675.vocab',
 }
 
+# Returns a string template
+VOCAB_FILES_CWS = {
+    'pinyin': 'cws_tokenizers/pinyin_cws_22675_{}.vocab',
+    'wubi': 'cws_tokenizers/wubi_cws_22675_{}.vocab',
+}
+
 VOCAB_FILES_NO_INDEX = {
     'pinyin': 'tokenizers/pinyin_no_index_22675.vocab',
     'wubi': 'tokenizers/wubi_no_index_22675.vocab',
@@ -83,6 +89,17 @@ BEST_CKPTS_SHUFFLED = {
     'pinyin': 'ckpt_8840',
 }
 
+BEST_CKPTS_CWS = {
+    'pinyin': 'ckpt_8840',
+    'wubi': 'ckpt_8840',
+}
+
+BEST_CKPT_BYTE = 'ckpt_8840'
+BEST_CKPT_RANDOM_INDEX = 'ckpt_8840'
+DIR_CKPTS_BYTE = 'checkpoints/ckpts_byte_22675'
+DIR_CKPTS_RANDOM_INDEX = 'checkpoints/ckpts_random_index_22675'
+
+
 DIR_CKPT_SP = {
     "bert": "checkpoints/checkpoints_bert_zh_22675",
     "concat_sep": "checkpoints/checkpoints_concat_sep",
@@ -103,9 +120,11 @@ DIR_CKPTS = {
 }
 
 DIR_CKPTS_CWS = {
-    "raw": "checkpoints/checkpoints_cws_raw_zh_22675",
-    "wubi": "checkpoints/checkpoints_cws_wubi_zh_22675",
-    "zhuyin": "checkpoints/checkpoints_cws_zhuyin_zh_22675",
+    # "raw": "checkpoints/checkpoints_cws_raw_zh_22675",
+    # "wubi": "checkpoints/checkpoints_cws_wubi_zh_22675",
+    # "zhuyin": "checkpoints/checkpoints_cws_zhuyin_zh_22675",
+    'pinyin': 'checkpoints/ckpts_pinyin_cws_22675',
+    'wubi': 'checkpoints/ckpts_wubi_cws_22675',
 }
 
 DIR_CKPTS_LONG = {

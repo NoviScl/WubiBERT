@@ -37,17 +37,9 @@ from torch.utils.data.distributed import DistributedSampler
 
 from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
-from tokenization import (
-    ALL_TOKENIZERS, 
-    BertTokenizer, 
-    ConcatSepTokenizer, 
-    WubiZhTokenizer, 
-    RawZhTokenizer, 
-    BertZhTokenizer,
-)
 from optimization import BertAdam, warmup_linear, get_optimizer
 from schedulers import LinearWarmUpScheduler
-from utils import mkdir, is_main_process, get_freer_gpu
+from utils import mkdir, is_main_process, get_freer_gpu, load_tokenizer
 
 # from google_albert_pytorch_modeling import AlbertConfig, AlbertForMultipleChoice
 # from pytorch_modeling import BertConfig, BertForMultipleChoice, ALBertConfig, ALBertForMultipleChoice
@@ -335,6 +327,7 @@ def parse_args():
     parser.add_argument('--tokenizer_type', type=str, required=True)
     parser.add_argument('--vocab_file', type=str, required=True)
     parser.add_argument('--vocab_model_file', type=str, required=True)
+    parser.add_argument('--cws_vocab_file', type=str, default='')
     parser.add_argument('--config_file', type=str, required=True)
     parser.add_argument('--init_checkpoint', type=str, required=True)
 
@@ -492,7 +485,8 @@ def train(args):
     # Tokenizer
     logger.info('Loading tokenizer...')
     logger.info('vocab file={}, vocab_model_file={}'.format(args.vocab_file, args.vocab_model_file))
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    # tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = load_tokenizer(args)
     real_tokenizer_type = args.output_dir.split(os.path.sep)[-2]
     
     # Load training data
@@ -847,7 +841,8 @@ def test(args):
     processor = c3Processor(args.data_dir, do_test=True)
     label_list = processor.get_labels()
     logger.info('Loading tokenizer...')
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    # tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = load_tokenizer(args)
     
 
     # Load test data

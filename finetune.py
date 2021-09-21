@@ -10,10 +10,10 @@ import argparse
 class Job:
     def __init__(self, task: str, tokenizer: str, ckpt: str, seed: int,
                  debug=False, two_level_embeddings=False, use_base=False,
-                 use_long=False, use_shuffled=False, use_sp=False, 
-                 use_no_index=False, classification_split_char=False,
-                 noise_type=None, noise_train=None, noise_test=None, 
-                 fewshot=False):
+                 use_long=False, use_shuffled=False, use_sp=False, use_cws=False,
+                 use_no_index=False, use_byte=False, use_random_index=False,
+                 classification_split_char=False, noise_type=None, 
+                 noise_train=None, noise_test=None, fewshot=False):
         self.task = task
         self.tokenizer = tokenizer
         self.ckpt = ckpt
@@ -26,6 +26,9 @@ class Job:
         self.use_shuffled = use_shuffled
         self.use_sp = use_sp
         self.use_no_index = use_no_index
+        self.use_cws = use_cws
+        self.use_byte = use_byte
+        self.use_random_index = use_random_index
         self.classification_split_char = classification_split_char
         self.noise_type = noise_type
         self.noise_train = noise_train
@@ -35,6 +38,8 @@ class Job:
         self.tokenizer_type = self.get_tokenizer_type()
         self.vocab_file = self.get_vocab_file()
         self.vocab_model_file = self.vocab_file.replace('.vocab', '.model')
+        if self.use_cws:
+            self.cws_vocab_file = self.vocab_file.replace('.vocab', '.cws_vocab')
         self.train_dir, self.dev_dir, self.test_dir = self.get_data_dirs()
         self.data_dir = self.test_dir
         self.config_file = self.get_config_file()
@@ -53,6 +58,12 @@ class Job:
             return 'CommonZhNoIndex'
         elif self.use_shuffled:
             return 'Shuffled'
+        elif self.use_cws:
+            return 'CWS'
+        elif self.use_byte:
+            return 'Byte'
+        elif self.use_random_index:
+            return 'RandomIndex'
         else:
             return consts.TOKENIZER_TYPES[self.tokenizer]
 
@@ -61,8 +72,11 @@ class Job:
             return consts.VOCAB_FILES_NO_INDEX[self.tokenizer]
         if self.use_shuffled:
             return consts.VOCAB_FILES_SHUFFLED[self.tokenizer]
-        else:
-            return consts.VOCAB_FILES[self.tokenizer]
+        if self.use_cws:
+            return consts.VOCAB_FILES_CWS[self.tokenizer].format('80')
+        if self.use_byte:
+            return consts.VOC
+        return consts.VOCAB_FILES[self.tokenizer]
 
     def is_classification_task(self) -> bool:
         C_TASKS = [
@@ -133,6 +147,8 @@ class Job:
             return consts.DIR_CKPTS_NO_INDEX[self.tokenizer]
         elif self.use_shuffled:
             return consts.DIR_CKPTS_SHUFFLED[self.tokenizer]
+        elif self.use_cws:
+            return consts.DIR_CKPTS_CWS[self.tokenizer]
         else:
             return consts.DIR_CKPTS[self.tokenizer]
 
@@ -185,6 +201,8 @@ class Job:
                 tokenizer += '_no_index'
             if self.two_level_embeddings:
                 tokenizer += '_twolevel'
+            if self.use_cws:
+                tokenizer += '_cws'
 
             if task == 'drcd':
                 tokenizer += '_trad'  # DRCD always use traditional Chinese
@@ -264,8 +282,9 @@ class Job:
         }
         if self.noise_type is not None:
             ret['test_model'] = self.test_model
+        if self.use_cws:
+            ret['cws_vocab_file'] = self.cws_vocab_file
         return ret
-
 
     def get_cmd(self, script_last=True):
         cmd = []
@@ -275,6 +294,7 @@ class Job:
         cmd += ['config_file=' + self.config_file]
         cmd += ['vocab_file=' + self.vocab_file]
         cmd += ['vocab_model_file=' + self.vocab_model_file]
+        cmd += ['cws_vocab_file=' + self.cws_vocab_file]
         cmd += ['tokenizer_type=' + self.tokenizer_type]
         cmd += ['train_dir=' + self.train_dir]
         cmd += ['dev_dir=' + self.dev_dir]
@@ -306,11 +326,14 @@ RUN_IN_BG = False
 START_FROM_CKPT = False	# Not supported
 SLEEP_DURATION = True
 
-TWO_LEVEL_EMBEDDINGS = True
+TWO_LEVEL_EMBEDDINGS = False
 # USE_BASE = False
 # USE_LONG = False
 USE_SHUFFLED = False
-USE_NO_INDEX = True
+USE_BYTE = True
+USE_RANDOM_INDEX = False
+USE_NO_INDEX = False
+USE_CWS = False
 NOISE_TYPE = None
 # NOISE_TYPE = 'glyph'
 # NOISE_TYPE = 'phonetic'
@@ -331,10 +354,8 @@ NOISE_TEST = [
 
 SEEDS = [
     10,
-    # 11,
-    # 12,
-    # 13,
-    # 14,
+    # 11, 12, 
+    # 13, 14,
     # 15, 16, 17, 18, 19,
 ]
 TOKENIZERS = [
@@ -353,14 +374,14 @@ DO_TRAIN = True
 DO_TEST = True
 FEWSHOT = False
 TASKS = [
-    # 'tnews',
+    'tnews',
     # 'iflytek',
     # 'wsc',
     # 'afqmc',
     # 'csl',
     # 'ocnli',
     # 'cmrc',
-    'drcd',
+    # 'drcd',
     # 'chid',
     # 'c3',
     # 'lcqmc',
@@ -381,6 +402,8 @@ if NOISE_TYPE == 'glyph':
     assert NOISE_TEST == [50, 100]
 if NOISE_TYPE == 'phonetic':
     assert NOISE_TEST == [10, 20, 30, 40, 50]
+assert sum([USE_CWS, USE_BYTE, USE_RANDOM_INDEX]) == 1
+
 
 
 def submit_job(task: str, tokenizer: str, ckpt: str, seed: int, **kwargs):
@@ -394,6 +417,8 @@ def submit_job(task: str, tokenizer: str, ckpt: str, seed: int, **kwargs):
     
     script = job.get_script()
     env = job.get_vars()
+    # print(env)
+    # exit()
     if RUN_IN_BG:
         raise NotImplementedError
     else:
@@ -414,10 +439,13 @@ def get_best_ckpt(tokenizer):
         return consts.BEST_CKPTS_NO_INDEX[tokenizer]
     elif USE_SHUFFLED:
         return consts.BEST_CKPTS_SHUFFLED[tokenizer]
+    elif USE_CWS:
+        return consts.BEST_CKPTS_CWS[tokenizer]
     else:
         return consts.BEST_CKPTS[tokenizer]
 
 def finetune_noisy():
+    print("finetune_noisy()")
     for task in TASKS:
         for tokenizer in TOKENIZERS:
             for noise_train in NOISE_TRAIN:
@@ -449,12 +477,14 @@ def finetune():
                 submit_job(task, tokenizer, ckpt, seed,
                            debug=DEBUG, 
                            two_level_embeddings=TWO_LEVEL_EMBEDDINGS,
-                           use_base=USE_BASE,
-                           use_long=USE_LONG,
+                        #    use_base=USE_BASE,
+                        #    use_long=USE_LONG,
                            use_shuffled=USE_SHUFFLED,
                            use_no_index=USE_NO_INDEX,
-                           use_sp=USE_SP,
-                           classification_split_char=CLASSIFICATION_SPLIT_CHAR)
+                        #    use_sp=USE_SP,
+                           use_cws=USE_CWS,
+                        #    classification_split_char=CLASSIFICATION_SPLIT_CHAR
+                           )
 
 
 def main():
@@ -464,9 +494,5 @@ def main():
         finetune()
 
 
-
 if __name__ == '__main__':
     main()
-
-
-

@@ -37,10 +37,11 @@ batch_size=${batch_size:-"32"}
 gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
-max_seq_length=${max_seq_length:-128}
-fewshot=${fewshot:-1}
+# max_seq_length=${max_seq_length:-128}
+fewshot=${fewshot:-"0"}
 two_level_embeddings=${two_level_embeddings:-"0"}
 test_model=${test_model:-""}
+cws_vocab_file=${cws_vocab_file:-""}
 # precision=${14:-"fp16"}
 
 echo "mode = $mode"
@@ -107,13 +108,21 @@ CMD+="--seed $seed "
 
 CMD+="--epochs $epochs "
 CMD+="--warmup_proportion $warmup_proportion "
-CMD+="--max_seq_length $max_seq_length "
+# CMD+="--max_seq_length $max_seq_length "
 CMD+="--learning_rate $learning_rate "
 CMD+="--gradient_accumulation_steps=$gradient_accumulation_steps "
 # CMD+="--max_steps $max_steps "
+if [[ $fewshot == "1" ]] ; then
+  CMD+="--fewshot "
+fi
 CMD+="--fewshot $fewshot "
-CMD+="--do_lower_case "
-CMD+="--test_model $test_model "
+# CMD+="--do_lower_case "
+if [[ $test_model != "" ]] ; then
+  CMD+="--test_model $test_model "
+fi
+if [[ $cws_vocab_file != "" ]] ; then
+  CMD+="--cws_vocab_file $cws_vocab_file "
+fi
 # CMD+="$use_fp16"
 
 LOGFILE=$out_dir/$seed/logfile

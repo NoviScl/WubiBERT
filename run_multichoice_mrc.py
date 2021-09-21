@@ -53,7 +53,6 @@ from utils import (
     mkdir, get_freer_gpu, get_device, output_dir_to_tokenizer_name
 )
 
-# from google_albert_pytorch_modeling import AlbertConfig, AlbertForMultipleChoice
 from mrc.preprocess.CHID_preprocess import (
     RawResult, 
     get_final_predictions, 
@@ -65,12 +64,10 @@ from mrc.preprocess.CHID_preprocess import (
 )
 from mrc.pytorch_modeling import ALBertConfig, ALBertForMultipleChoice
 from mrc.pytorch_modeling import BertConfig, BertForMultipleChoice
-# from tools.official_tokenization import BertTokenizer
-# from tools.pytorch_optimization import get_optimization, warmup_linear
 from run_pretraining import pretraining_dataset, WorkerInitObj
 
-import kara_storage  
-
+import kara_storage
+import utils
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -80,11 +77,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# 参数
+USE_KARA = True     # 用 kara_storage（以减少内存占用）
+# Some fixed settings,
 SHUFFLE = True      # 保存 feature 文件前打乱（默认 True 就好）
-USE_KARA = True     # 用 kara（以减少内存占用）
 SPLIT_CHAR = False  # 拆字
-ADD_DEF = True     # 加定义
+ADD_DEF = True      # 加定义
 
 
 class ChidDataset(IterableDataset):
@@ -95,19 +92,13 @@ class ChidDataset(IterableDataset):
     def reset(self):
         self.file.seek(0)
 
-    # def __len__(self):
-    #     # return 519407
-    #     return 618
-
     def seek(self, *args):
         self.file.seek(*args)
 
     def read(self):
         line = self.file.readline()
         if line == '':
-            # print("REACHED EOF!!!!!!!!!!!!!!!!!!!!!!")
             raise EOFError
-            # return None
         else:
             feature = json.loads(line)
             input_ids = torch.tensor(feature['input_ids'], dtype=torch.long)
@@ -155,16 +146,6 @@ def reset_model(args, bert_config, model_cls):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--gpu_ids", default='', required=True, type=str)
-    # parser.add_argument("--bert_config_file", required=True,
-    #                     default='check_points/pretrain_models/roberta_wwm_ext_large/bert_config.json')
-    # parser.add_argument("--vocab_file", required=True,
-    #                     default='check_points/pretrain_models/roberta_wwm_ext_large/vocab.txt')
-    # parser.add_argument("--init_restore_dir", required=True,
-    #                     default='check_points/pretrain_models/roberta_wwm_ext_large/pytorch_model.pth')
-    # parser.add_argument("--input_dir", required=True, default='dataset/CHID')
-    # parser.add_argument("--output_dir", required=True, default='check_points/CHID')
-
     parser.add_argument('--config_file', type=str, required=True)
     parser.add_argument('--vocab_file', type=str, required=True)
     parser.add_argument('--vocab_model_file', type=str, required=True)
@@ -359,9 +340,6 @@ def train(args):
     filename_params = os.path.join(output_dir, 'params.json')
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
 
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
-
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = get_device()
     n_gpu = torch.cuda.device_count()
     logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
@@ -372,11 +350,7 @@ def train(args):
 
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
     # Set seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+    utils.set_seed(args.seed)
 
     # Prepare model
     logger.info('Preparing model from checkpoint {}'.format(args.init_checkpoint))
@@ -428,7 +402,6 @@ def train(args):
             args.train_ans_file,
             file_train_examples,
             is_training=True)
-        # train_examples = train_examples[:10]  # TODO: remove
         gen_train_features_json(
             train_examples,
             file_train_features,
@@ -442,11 +415,6 @@ def train(args):
             shuffle=SHUFFLE)
         del train_examples
     
-    # all_input_ids, all_input_masks, all_segment_ids, all_choice_masks, all_labels = expand_features(train_features, is_training=True)
-    # train_data = TensorDataset(all_input_ids, all_input_masks, all_segment_ids, all_choice_masks, all_labels)
-    # train_sampler = RandomSampler(train_data)
-    # train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
-    # exit(0)
     logger.info('Making ChidDataset from training feature file...')
     chid_dataset = ChidDataset(file_train_features)
     train_data = kara_storage.make_torch_dataset(chid_dataset)
@@ -459,9 +427,6 @@ def train(args):
         args.max_seq_length,
         real_tokenizer_type,
         config.vocab_size)
-    # dev_example_file = os.path.join(args.data_dir, 'dev_examples' + suf)
-    # dev_feature_file = os.path.join(args.data_dir, 'dev_features' + suf)
-    # logger.info("Generating dev features..., file_features = {}".format(dev_feature_file))
 
     # Generate (or load) dev features
     logger.info('Loading dev input...')
@@ -482,34 +447,14 @@ def train(args):
         max_num_choices=args.max_num_choices,
         is_training=False,
         split_char=SPLIT_CHAR)
-    # logger.info('Got dev features')
-
-    # num_train_steps = int(
-    #     len(train_features) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+    
+    # NOTE: The following two vars might not hold if you change arguments
+    # such as `max_num_choices`
     num_train_steps = 86567
     num_features = 519407
-    # num_train_steps = 15
-    # num_features = 90
-
-
-    # logger.info("Num generate examples = {}".format(len(train_features)))
     logger.info("Num generated examples = {}".format(num_features))
     logger.info("Batch size = {}".format(args.train_batch_size))
     logger.info("Num steps for a epoch = {}".format(num_train_steps))
-
-    # all_example_ids = [f.example_id for f in eval_features]
-    # all_tags = [f.tag for f in eval_features]
-    # all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-    # all_input_masks = torch.tensor([f.input_masks for f in eval_features], dtype=torch.long)
-    # all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-    # all_choice_masks = torch.tensor([f.choice_masks for f in eval_features], dtype=torch.long)
-    # all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-    # eval_data = TensorDataset(all_input_ids, all_input_masks, all_segment_ids, all_choice_masks,
-    #                           all_example_index)
-
-    # Run prediction for full data
-    # eval_sampler = SequentialSampler(eval_data)
-    # eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.predict_batch_size)
 
     eval_dataloader, eval_data = get_eval_dataloader_and_dataset(eval_features, args.predict_batch_size)
     all_example_ids, all_tags = get_example_ids_and_tags(eval_features)
@@ -535,7 +480,6 @@ def train(args):
 
     # Start training and evaluation
     logger.info('***** Training *****')
-    # logger.info('Number of examples: {}'.format(len(train_data)))
     logger.info('Number of epochs: ' + str(args.num_train_epochs))
     logger.info('Batch size: ' + str(args.train_batch_size))
     for ep in range(int(args.num_train_epochs)):
@@ -549,7 +493,6 @@ def train(args):
             for step, batch in enumerate(train_dataloader):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_masks, segment_ids, choice_masks, labels = batch
-                # input_ids, input_masks, segment_ids, choice_masks, labels = expand_features(batch, is_training=True)
                 if step == 0 and ep == 0:
                     logger.info('shape of input_ids: {}'.format(input_ids.shape))
                     logger.info('shape of labels: {}'.format(labels.shape))
@@ -597,7 +540,6 @@ def train(args):
                           desc="Evaluating",
                           disable=None,
                           mininterval=10.0):
-            # input_ids, input_masks, segment_ids, choice_masks, example_indices = expand_features(batch, is_training=False)
             input_ids, input_masks, segment_ids, choice_masks, example_indices = batch
             if len(all_results) == 0:
                 print('shape of input_ids: {}'.format(input_ids.shape))
@@ -657,9 +599,6 @@ def train(args):
             best_acc = acc
             best_model_filename = os.path.join(output_dir, 'best_model.bin')
             copyfile(model_filename, best_model_filename)
-            # model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-            # torch.save(model_to_save.state_dict(), output_model_file)
-            # logger.info('save trained model from {}'.format(output_model_file))
             logger.info('New best model saved')
 
     print('Training finished')
@@ -677,9 +616,6 @@ def test(args):
     filename_params = os.path.join(output_dir, 'params.json')
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
 
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
-
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = get_device()
     n_gpu = torch.cuda.device_count()
     logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
@@ -691,11 +627,7 @@ def test(args):
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
     # Set seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+    utils.set_seed(args.seed)
 
     # Prepare model
     file_checkpoint = os.path.join(output_dir, consts.FILENAME_BEST_MODEL)
@@ -711,11 +643,8 @@ def test(args):
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
 
-    # if os.path.exists(args.input_dir) == False:
-        # os.makedirs(args.input_dir, exist_ok=True)
 
     # Tokenizer
-    # tokenizer = BertTokenizer(vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
     logger.info('Loading tokenizer...')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     real_tokenizer_type = args.output_dir.split(os.path.sep)[-2]
@@ -833,15 +762,13 @@ def test(args):
     print('Testing finished')
 
 
-def main():
-    args = parse_args()
+def main(args):
     if args.do_train:
         train(args)
-    
     if args.do_test:
         test(args)
+    print('DONE')
 
 
 if __name__ == "__main__":
-    main()
-    print('DONE')
+    main(parse_args())

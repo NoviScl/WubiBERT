@@ -125,11 +125,11 @@ ch2stroke = "data/chinese_to_stroke.pkl"
 zhengma2ch = "data/zhengma_to_chinese.pkl"
 ch2zhengma = "data/chinese_to_zhengma.pkl"
 
-wubi2ch = "/home/sichenglei/WubiBERT/data/wubi_to_chinese.pkl"
-ch2wubi = "/home/sichenglei/WubiBERT/data/chinese_to_wubi.pkl"
+wubi2ch = "data/wubi_to_chinese.pkl"
+ch2wubi = "data/chinese_to_wubi.pkl"
 
-pinyin2ch = "/home/sichenglei/WubiBERT/data/pinyin_to_chinese.pkl"
-ch2pinyin = "/home/sichenglei/WubiBERT/data/chinese_to_pinyin.pkl"
+pinyin2ch = "data/pinyin_to_chinese.pkl"
+ch2pinyin = "data/chinese_to_pinyin.pkl"
 
 zhuyin2ch = "data/zhuyin_to_chinese.pkl"
 ch2zhuyin = "data/chinese_to_zhuyin.pkl"
@@ -151,11 +151,11 @@ def load_dict(dict_path):
 	return pickle.load(open(dict_path, "rb"))
 
 ## load some preprocessed dicts
-with open("/home/sichenglei/WubiBERT/byte_char_map.pkl", "rb") as f:
+with open("byte_char_map.pkl", "rb") as f:
     ch_chars = pickle.load(f)
 SEP = chr(ord('_')+50000)
 
-with open("/home/sichenglei/WubiBERT/random_index_map.pkl", 'rb') as f:
+with open("random_index_map.pkl", 'rb') as f:
     random_index_map = pickle.load(f)
 
 # map_dict = load_dict(CH2ENCODE)
@@ -1317,7 +1317,7 @@ class CWSNewTokenizer(object):
     
     def tokenize(self, text):
         words = self.seg([text])[0]
-        print (words)
+        # print (words)
         tokens = []
         for word in words:
             if word in self.cws_vocab:
@@ -1376,4 +1376,7 @@ ALL_TOKENIZERS = {
     'CommonZhNoIndex': CommonZhNoIndexTokenizer,
     'Shuffled': ShuffledTokenizer,
     'PinyinConcatWubi': PinyinConcatWubiTokenizer, 
+    'CWS': CWSNewTokenizer,
+    'Byte': ByteTokenizer,
+    'RandomIndex': RandomIndexTokenizer,
 }

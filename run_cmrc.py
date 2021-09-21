@@ -103,7 +103,6 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
 
     file_truth = os.path.join(args.data_dir, file_data)
     res = get_eval(file_truth, file_preds)
-    # logger.info(json.dumps(res, indent=2))
     model.train()
     return res['em'], res['f1']
 
@@ -111,8 +110,8 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    # training parameter
-    parser.add_argument('--epochs', type=int, default=2)
+    # Hyperparameters
+    parser.add_argument('--epochs', type=int, default=6)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
     parser.add_argument('--lr', type=float, default=3e-5)
@@ -121,23 +120,18 @@ def parse_args():
     parser.add_argument('--warmup_rate', type=float, default=0.05)
     parser.add_argument("--schedule", default='warmup_linear', type=str, help='schedule')
     parser.add_argument("--weight_decay_rate", default=0.01, type=float, help='weight_decay_rate')
-    parser.add_argument('--fp16', action='store_true', default=False)  # only sm >= 7.0 (tensorcores)
     parser.add_argument('--max_ans_length', type=int, default=50)
     parser.add_argument('--n_best', type=int, default=20)
-    parser.add_argument('--eval_epochs', type=float, default=0.5)
-    parser.add_argument('--save_best', type=bool, default=True)
     parser.add_argument('--max_seq_length', type=int, default=512)
+    parser.add_argument('--seed', type=int, default=0)
 
-    # Required args
-    parser.add_argument('--seed', type=int, required=True)
-    parser.add_argument('--vocab_file', type=str, required=True)
-    parser.add_argument('--task_name', type=str, required=True)
-    parser.add_argument('--tokenizer_type', type=str, required=True)
-    parser.add_argument('--vocab_model_file', type=str, required=True)
+    # Other arguments
+    parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--init_checkpoint', type=str, required=True)
     parser.add_argument('--config_file', type=str, required=True)
-    parser.add_argument('--data_dir', type=str, required=True)
-
+    parser.add_argument('--tokenizer_type', type=str, required=True)
+    parser.add_argument('--vocab_file', type=str, required=True)
+    parser.add_argument('--vocab_model_file', type=str, required=True)
     parser.add_argument('--output_dir', type=str, default='logs/temp')
     parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
     parser.add_argument('--do_test', action='store_true', help='Whether to test.')
@@ -271,7 +265,6 @@ def gen_examples_and_features(
     # Examples
     if use_example_cache and os.path.exists(file_examples):
         logger.info('Found example file, loading...')
-        # examples = json.load(open(file_examples, 'r'))
         examples = json_load_by_line(file_examples)
         logger.info(f'Loaded {len(examples)} examples')
     else:
@@ -337,7 +330,7 @@ def train(args):
     # Device
     device = get_device()  # Get gpu with most free RAM
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
+    logger.info("device: {} n_gpu: {}".format(device, n_gpu))
 
     logger.info('SEED: ' + str(args.seed))
     set_seed(args.seed, n_gpu)
@@ -428,7 +421,7 @@ def train(args):
 
     optimizer = get_optimizer(
         model=model,
-        float16=args.fp16,
+        float16=False,
         learning_rate=args.lr,
         total_steps=total_steps,
         schedule=args.schedule,
@@ -476,20 +469,11 @@ def train(args):
                 pbar.set_postfix({'loss': '{0:1.5f}'.format(total_loss / (num_train_steps + 1e-5))})
                 pbar.update(1)
 
-                if args.fp16:
-                    optimizer.backward(loss)
-                    # modify learning rate with special warm up BERT uses
-                    # if args.fp16 is False, BertAdam is used and handles this automatically
-                    lr_this_step = args.lr * warmup_linear(global_steps / total_steps, args.warmup_rate)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
-                else:
-                    loss.backward()
+                loss.backward()
 
                 num_train_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     optimizer.step()
-                    # model.zero_grad()
                     optimizer.zero_grad()
                     global_steps += 1
 
@@ -562,7 +546,7 @@ def test(args):
     # Device
     device = get_device()  # Get gpu with most free RAM
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
+    logger.info("device: {} n_gpu: {}".format(device, n_gpu))
 
     logger.info('SEED: ' + str(args.seed))
     set_seed(args.seed, n_gpu)
@@ -582,18 +566,14 @@ def test(args):
     # Tokenizer
     logger.info('Loading tokenizer...')
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
-    # real_tokenizer_type = output_dir_to_tokenizer_name(args.output_dir)
     logger.info('Loaded tokenizer')
 
     # Because tokenizer_type is a part of the feature file name,
     # new features will be generated for every tokenizer type.
     tokenizer_name = output_dir_to_tokenizer_name(args.output_dir)
     file_data = os.path.join(args.data_dir, 'test.json')
-    # file_data = os.path.join(args.data_dir, 'dev.json')
     file_examples, file_features = get_filename_examples_and_features(
         'test',
-        # 'train',
-        # 'dev',
         args.data_dir,
         args.max_seq_length,
         tokenizer_name=tokenizer_name,
@@ -621,8 +601,7 @@ def test(args):
     acc, f1 = evaluate(
         model, 
         args,
-        file_data='test.json', 
-        # file_data='dev.json',
+        file_data='test.json',
         examples=examples,
         features=features,
         device=device,
@@ -638,18 +617,13 @@ def test(args):
     print('Testing finished')
 
 
-def main():
-    print('main() in run_cmrc.py')
-    args = parse_args()
-
+def main(args):
     if args.do_train:
         train(args)
-
     if args.do_test:
         test(args)
-        
     print('DONE')
 
 
 if __name__ == '__main__':
-    main()
+    main(parse_args())

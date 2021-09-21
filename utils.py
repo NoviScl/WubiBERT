@@ -20,6 +20,7 @@ import torch
 import torch.distributed as dist
 
 from pathlib import Path
+from tokenization import ALL_TOKENIZERS
 
 
 def get_rank():
@@ -92,9 +93,17 @@ def output_dir_to_tokenizer_name(output_dir):
         'wubi_shuffled',
         'pinyin_no_index',
         'wubi_no_index',
+
+        # New CWS
+        'pinyin_cws',
+        'wubi_cws',
+
+        # Old CWS
         'cws_raw',
         'cws_wubi',
         'cws_zhuyin',
+
+        # Ordinary
         'cangjie',
         'stroke',
         'pinyin',
@@ -166,3 +175,11 @@ def get_subchar_pos(tokens, subchars):
 		pos[i] = j
 		len_s += len(subchar)
 	return pos
+
+
+def load_tokenizer(args):
+    if args.tokenizer_type == 'CWS':
+        tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file, args.cws_vocab_file)
+    else:
+        tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    return tokenizer

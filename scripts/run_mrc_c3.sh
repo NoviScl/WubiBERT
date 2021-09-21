@@ -22,6 +22,7 @@ seed=${seed:-2}
 epochs=${epochs:-6}
 # epochs=${epochs:-8}
 test_model=${test_model:-""}
+cws_vocab_file=${cws_vocab_file:-""}
 
 mkdir -p $out_dir
 
@@ -65,6 +66,9 @@ CMD+="--gradient_accumulation_steps=12 "
 CMD+="--learning_rate=2e-5 "
 CMD+="--warmup_proportion=0.05 "
 CMD+="--max_seq_length=512 "
+if [[ $cws_vocab_file != "" ]] ; then
+  CMD+="--cws_vocab_file $cws_vocab_file "
+fi
 
 LOGFILE=$out_dir/$seed/logfile
 

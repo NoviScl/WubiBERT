@@ -22,12 +22,10 @@ import argparse
 import logging
 import os
 import random
-# import wget
 import json
 import time
 from shutil import copyfile
 
-# import dllogger
 import numpy as np
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
@@ -159,74 +157,24 @@ def parse_args(parser=argparse.ArgumentParser()):
     parser.add_argument('--train_dir', type=str)
     parser.add_argument('--dev_dir', type=str)
     parser.add_argument('--test_dir', type=str)
-    parser.add_argument(
-        "--task_name",
-        default=None,
-        type=str,
-        required=True,
-        choices=PROCESSORS.keys(),
-        help="The name of the task to train.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        default=None,
-        type=str,
-        required=True,
-        help="The output directory where the model predictions and checkpoints "
-        "will be written.",
-    )
-    parser.add_argument(
-        "--init_checkpoint",
-        default=None,
-        type=str,
-        required=True,
-        help="The checkpoint file from pretraining",
-    )
+    parser.add_argument("--task_name", type=str, required=True, choices=PROCESSORS.keys())
+    parser.add_argument("--output_dir", type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
+    parser.add_argument("--init_checkpoint", type=str, required=True, help="The checkpoint file from pretraining",)
+    parser.add_argument('--tokenizer_type', type=str, required=True, help="Type of tokenizer")
+    parser.add_argument('--vocab_file', type=str, required=True, help="Vocabulary mapping/file BERT was pretrainined on")
+    parser.add_argument('--vocab_model_file', type=str, required=True, help="Model file for sentencepiece")
+    parser.add_argument("--config_file", type=str, required=True, help="The BERT model config")
 
     ## Other parameters
-    parser.add_argument(
-        "--max_seq_length",
-        default=128,
-        type=int,
-        help="The maximum total input sequence length after WordPiece "
-        "tokenization. \n"
-        "Sequences longer than this will be truncated, and sequences shorter \n"
-        "than this will be padded.",
-    )
-    parser.add_argument("--do_train",
-                        action='store_true',
-                        help="Whether to run training.")
-    parser.add_argument("--do_eval",
-                        action='store_true',
-                        help="Whether to get model-task performance on the dev"
-                        " set by running eval.")
-    parser.add_argument("--do_test",
-                        action='store_true',
-                        help="Whether to output prediction results on the dev "
-                        "set by running eval. Changed: do eval on test set.")
-    parser.add_argument("--do_lower_case",
-                        action='store_true',
-                        help="Set this flag if you are using an uncased model.")
-    parser.add_argument("--train_batch_size",
-                        default=32,
-                        type=int,
-                        help="Batch size per GPU for training.")
-    parser.add_argument("--eval_batch_size",
-                        default=8,
-                        type=int,
-                        help="Batch size per GPU for eval.")
-    parser.add_argument("--learning_rate",
-                        default=5e-5,
-                        type=float,
-                        help="The initial learning rate for Adam.")
-    parser.add_argument("--epochs",
-                        default=-1,
-                        type=int,
-                        help="Total number of training epochs to perform.")
-    # parser.add_argument("--max_steps",
-    #                     default=-1.0,
-    #                     type=float,
-    #                     help="Total number of training steps to perform.")
+    parser.add_argument("--max_seq_length", default=128, type=int,
+        help="Maximum total input sequence length after WordPiece tokenization.")
+    parser.add_argument("--do_train", action='store_true')
+    parser.add_argument("--do_eval", action='store_true')
+    parser.add_argument("--do_test", action='store_true')
+    parser.add_argument("--train_batch_size", default=32, type=int,)
+    parser.add_argument("--eval_batch_size", default=8, type=int)
+    parser.add_argument("--learning_rate", default=2e-5, type=float)
+    parser.add_argument("--epochs", default=-1, type=int)
     parser.add_argument(
         "--warmup_proportion",
         default=0.1,
@@ -234,33 +182,13 @@ def parse_args(parser=argparse.ArgumentParser()):
         help="Proportion of training to perform linear learning rate warmup "
         "for. E.g., 0.1 = 10%% of training.",
     )
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
+    parser.add_argument("--no_cuda", action='store_true', 
+                        help="If true, don't use CUDA")
     parser.add_argument('--seed',
                         type=int,
                         default=1,
                         help="random seed for initialization")
-    parser.add_argument(
-        '--gradient_accumulation_steps',
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a "
-        "backward/update pass.")
-    # parser.add_argument(
-    #     '--fp16',
-    #     action='store_true',
-    #     help="Mixed precision training",
-    # )
-    # parser.add_argument(
-    #     '--amp',
-    #     action='store_true',
-    #     help="Mixed precision training",
-    # )
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
     parser.add_argument(
         '--loss_scale',
         type=float,
@@ -270,33 +198,11 @@ def parse_args(parser=argparse.ArgumentParser()):
         "0 (default value): dynamic loss scaling.\n"
         "Positive power of 2: static loss scaling value.\n",
     )
-    parser.add_argument('--tokenizer_type',
-                        type=str,
-                        default=None,
-                        required=True,
-                        help="Type of tokenizer")
-    parser.add_argument('--vocab_file',
-                        type=str,
-                        default=None,
-                        required=True,
-                        help="Vocabulary mapping/file BERT was pretrainined on")
-    parser.add_argument('--vocab_model_file',
-                        type=str,
-                        default=None,
-                        required=True,
-                        help="Model file for sentencepiece")
-    parser.add_argument("--config_file",
-                        default=None,
-                        type=str,
-                        required=True,
-                        help="The BERT model config")
-    parser.add_argument('--skip_checkpoint',
-                        default=False,
-                        action='store_true',
-                        help="Whether to save checkpoints")
+    parser.add_argument('--skip_checkpoint', action='store_true', help="Whether to save checkpoints")
     parser.add_argument('--two_level_embeddings', action="store_true")
     parser.add_argument('--fewshot', type=int, default=0)
-    parser.add_argument('--test_model', type=str)
+    parser.add_argument('--test_model', type=str, default=None)
+    parser.add_argument('--cws_vocab_file', type=str, default=None)
     return parser.parse_args()
 
 
@@ -411,8 +317,7 @@ def gen_tensor_dataset(features, two_level_embeddings):
         )
 
 
-def get_train_features(data_dir, max_seq_length, do_lower_case,
-                       local_rank, train_batch_size,
+def get_train_features(data_dir, max_seq_length, train_batch_size,
                        gradient_accumulation_steps, epochs, tokenizer,
                        processor, is_fewshot=False, two_level_embeddings=False):
     train_examples = processor.get_train_examples(data_dir)
@@ -485,17 +390,10 @@ def train(args):
     logger.info('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
-    print('vocab_file:', args.vocab_file)
-    print('vocab_model_file:', args.vocab_model_file)
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = utils.load_tokenizer(args)
 
     # Setup output files
-    if args.fewshot == 0:
-        output_dir = os.path.join(args.output_dir, str(args.seed))
-        is_fewshot = False
-    else:
-        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
-        is_fewshot = True
+    output_dir = os.path.join(args.output_dir, str(args.seed))
     filename_params = os.path.join(output_dir, 'args_train.json')
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
 
@@ -504,23 +402,18 @@ def train(args):
     train_features = get_train_features(
         args.train_dir,
         args.max_seq_length,
-        args.do_lower_case,
-        args.local_rank,
         args.train_batch_size,
         args.gradient_accumulation_steps,
         args.epochs,
         tokenizer,
         processor,
-        is_fewshot=is_fewshot,
         two_level_embeddings=args.two_level_embeddings,
     )
     num_train_optimization_steps = int(
         len(train_features) / args.train_batch_size /
         args.gradient_accumulation_steps) * args.epochs
-    if args.local_rank != -1:
-        num_train_optimization_steps = (num_train_optimization_steps //
-                                        torch.distributed.get_world_size())
 
+    utils.set_seed(args.seed)
     # Prepare model
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
     logger.info('Loading model from "{}"...'.format(args.init_checkpoint))
@@ -539,19 +432,6 @@ def train(args):
         # args.fp16,
         False,
     )
-
-    # if args.local_rank != -1:
-    #     try:
-    #         from apex.parallel import DistributedDataParallel as DDP
-    #     except ImportError:
-    #         raise ImportError("Please install apex from "
-    #                           "https://www.github.com/nvidia/apex to use "
-    #                           "distributed and fp16 training.")
-    #     model = DDP(model)
-    # elif n_gpu > 1:
-    #     pass
-    #     # model = torch.nn.DataParallel(model)
-
     loss_fct = torch.nn.CrossEntropyLoss()
 
     logger.info("***** Running training *****")
@@ -561,10 +441,7 @@ def train(args):
     logger.info("  Num steps = %d", num_train_optimization_steps)
 
     train_data = gen_tensor_dataset(train_features, two_level_embeddings=args.two_level_embeddings)
-    if args.local_rank == -1:
-        train_sampler = RandomSampler(train_data)
-    else:
-        train_sampler = DistributedSampler(train_data)
+    train_sampler = RandomSampler(train_data)
     train_dataloader = DataLoader(
         train_data,
         sampler=train_sampler,
@@ -590,17 +467,12 @@ def train(args):
     # Save config
     model_to_save = model.module if hasattr(model, 'module') else model
     filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
-    # with open(filename_config, 'w') as f:
-    #     f.write(model_to_save.config.to_json_string())
-
 
     for ep in trange(int(args.epochs), desc="Epoch"):
         # Train
         model.train()
         total_train_loss, num_train_steps = 0, 0
         for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-            # if args.max_steps > 0 and global_step > args.max_steps:
-            #     break
             batch = tuple(t.to(device) for t in batch)
             (input_ids, input_mask, segment_ids, label_ids,
              token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
@@ -621,11 +493,6 @@ def train(args):
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
-            # if args.fp16:
-            #     with amp.scale_loss(loss, optimizer) as scaled_loss:
-            #         scaled_loss.backward()
-            # else:
-            #     loss.backward()
             loss.backward()
 
             total_train_loss += loss.item()
@@ -708,7 +575,6 @@ def train(args):
                         label_ids.detach().cpu().numpy(),
                         axis=0,
                     )
-            # torch.cuda.synchronize()
 
             preds = np.argmax(preds, axis=1)
 
@@ -757,29 +623,21 @@ def train(args):
 
 
 def test(args):
-    # output_dir = os.path.join(args.output_dir, str(args.seed))
     # Setup output files
-    if args.fewshot == 0:
-        output_dir = os.path.join(args.output_dir, str(args.seed))
-        is_fewshot = False
-    else:
-        output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
-        is_fewshot = True
-    
+    output_dir = os.path.join(args.output_dir, str(args.seed))
     device = get_device(args)
     n_gpu = torch.cuda.device_count()
+    utils.set_seed(args.seed)
 
     # Tokenizer and processor
     logger.info('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = utils.load_tokenizer(args)
 
     # Load test data
     logger.info('Loading test data from "{}"'.format(args.test_dir))
     examples = processor.get_test_examples(args.test_dir)
-    print(e.text_a for e in examples[:3])
-    exit()
     eval_features, label_map = convert_examples_to_features(
         examples,
         processor.get_labels(),
@@ -872,7 +730,6 @@ def test(args):
     loss = total_eval_loss / num_eval_steps
     result = compute_metrics(args.task_name, preds, out_label_ids)
     acc = result['acc']
-    # results.update(result)
 
     # Save result to file
     result_file = os.path.join(output_dir, FILENAME_TEST_RESULT)
@@ -892,36 +749,19 @@ def test(args):
 
 
 def main(args):
-    logger.info("main() in run_glue.py")
     logger.info("Arguments:")
     logger.info(json.dumps(vars(args), indent=4))
 
-    output_dir = os.path.join(args.output_dir, str(args.seed))
     # Setup output files
-    if args.fewshot == 0:
-        is_fewshot = False
-    else:
-        # output_dir = os.path.join(args.output_dir, 'fewshot', str(args.seed))
-        is_fewshot = True
+    output_dir = os.path.join(args.output_dir, str(args.seed))
     os.makedirs(output_dir, exist_ok=True)
     filename_params = os.path.join(output_dir, consts.FILENAME_PARAMS)
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
 
 
-    
-    # args.fp16 = args.fp16 or args.amp
-
+    # Sanity check on arguments
     if not args.do_train and not args.do_eval and not args.do_test:
-        raise ValueError("At least one of `do_train`, `do_eval` or "
-                         "`do_test` must be True.")
-
-    if is_main_process():
-        if (os.path.exists(output_dir) and os.listdir(output_dir) and
-                args.do_train):
-            logger.warning("Output directory ({}) already exists and is not "
-                           "empty.".format(output_dir))
-    mkdir_by_main_process(output_dir)
-
+        raise ValueError("At least one of `do_train`, `do_eval` or `do_test` must be True.")
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, "
                          "should be >= 1".format(
@@ -937,11 +777,6 @@ def main(args):
                              args.gradient_accumulation_steps)
 
     # Set seed
-    logger.info(f'set seed: {args.seed}')
-    utils.set_seed(args.seed)
-   
-    # get_tokenization_result()
-    # args.two_level_embeddings = True  # TODO: remove
     if args.do_train:
         train(args)
     if args.do_test:
@@ -950,9 +785,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    print('[run_glue.py] __name__ == "__main__"')
-    print('device_count')
-    print(torch.cuda.device_count())
-
-    # get_tokenization_result(parse_args())
     main(parse_args())
