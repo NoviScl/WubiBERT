@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 model_name="bert-tiny"
 task_name=${task_name:-"nulls"}
-fewshot=${fewshot:-0}
 
 init_checkpoint=${init_checkpoint:-""}
 config_file=${config_file:-""}
 vocab_file=${vocab_file:-""}
 vocab_model_file=${vocab_model_file:-""}
+cws_vocab_file=${cws_vocab_file:-""}
 tokenizer_type=${tokenizer_type:-""}
 
 convert_to_simplified=${convert_to_simplified:-""}
@@ -52,8 +52,7 @@ fi
 #   CMD+="--convert_to_simplified "
 # fi
 
-CMD+="--task_name=${task_name} "
-# CMD+="--fewshot=${fewshot} "
+# CMD+="--task_name=${task_name} "
 CMD+="--tokenizer_type=${tokenizer_type} "
 CMD+="--vocab_file=${vocab_file} "
 CMD+="--vocab_model_file=${vocab_model_file} "
@@ -70,23 +69,11 @@ CMD+="--lr=3e-5 "
 CMD+="--warmup_rate=0.05 "
 CMD+="--max_seq_length=512 "
 
+if [[ $cws_vocab_file != "" ]] ; then
+  CMD+="--cws_vocab_file $cws_vocab_file "
+fi
+
 LOGFILE=$out_dir/$seed/logfile
 
 $CMD |& tee $LOGFILE
-
-# python test_mrc.py \
-#   --gpu_ids="0" \
-#   --n_batch=32 \
-#   --max_seq_length=512 \
-#   --task_name=${task_name} \
-#   --vocab_file=${vocab_file} \
-#   --bert_config_file=${config_file} \
-#   --init_restore_dir=$OUTPUT_DIR/$task_name/$MODEL_NAME/
-#   --output_dir=$OUTPUT_DIR/$task_name/$MODEL_NAME/ \
-#   --test_dir1=${data_dir}/test_examples.json \
-#   --test_dir2=${data_dir}/test_features.json \
-#   --test_file=${data_dir}/cmrc2018_test_2k.json \
-
-
-
 

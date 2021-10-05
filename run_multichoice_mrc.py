@@ -138,8 +138,8 @@ def reset_model(args, bert_config, model_cls):
         print('unexpected keys:{}'.format(unexpected_keys))
         print('error msgs:{}'.format(error_msgs))
 
-    if args.fp16:
-        model.half()
+    # if args.fp16:
+    #     model.half()
 
     return model
 
@@ -182,8 +182,8 @@ def parse_args():
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--do_lower_case", default=True,
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument('--fp16', default=False, action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
+    # parser.add_argument('--fp16', default=False, action='store_true',
+    #                     help="Whether to use 16-bit float precision instead of 32-bit")
     return parser.parse_args()
 
 
@@ -342,7 +342,7 @@ def train(args):
 
     device = get_device()
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
+    logger.info("device: {} n_gpu: {}".format(device, n_gpu))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
@@ -450,11 +450,11 @@ def train(args):
     
     # NOTE: The following two vars might not hold if you change arguments
     # such as `max_num_choices`
-    num_train_steps = 86567
-    num_features = 519407
+    num_train_steps = 86588
+    num_features = 519550
     logger.info("Num generated examples = {}".format(num_features))
     logger.info("Batch size = {}".format(args.train_batch_size))
-    logger.info("Num steps for a epoch = {}".format(num_train_steps))
+    logger.info("Total num steps (sum all epochs) = {}".format(num_train_steps))
 
     eval_dataloader, eval_data = get_eval_dataloader_and_dataset(eval_features, args.predict_batch_size)
     all_example_ids, all_tags = get_example_ids_and_tags(eval_features)
@@ -462,7 +462,8 @@ def train(args):
     # Optimizer
     optimizer = get_optimizer(
         model,
-        float16=args.fp16,
+        # float16=args.fp16,
+        float16=False,
         learning_rate=args.learning_rate,
         total_steps=num_train_steps,
         schedule='warmup_linear',
@@ -505,16 +506,16 @@ def train(args):
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
 
-                if args.fp16:
-                    optimizer.backward(loss)
-                    # modify learning rate with special warm up BERT uses
-                    # if args.fp16 is False, BertAdam is used and handles this automatically
-                    lr_this_step = args.learning_rate * warmup_linear(global_step / num_train_steps,
-                                                                      args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
-                else:
-                    loss.backward()
+                # if args.fp16:
+                #     optimizer.backward(loss)
+                #     # modify learning rate with special warm up BERT uses
+                #     # if args.fp16 is False, BertAdam is used and handles this automatically
+                #     lr_this_step = args.learning_rate * warmup_linear(global_step / num_train_steps,
+                #                                                       args.warmup_proportion)
+                #     for param_group in optimizer.param_groups:
+                #         param_group['lr'] = lr_this_step
+                # else:
+                loss.backward()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     optimizer.step()
                     optimizer.zero_grad()
@@ -618,7 +619,7 @@ def test(args):
 
     device = get_device()
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(device, n_gpu, args.fp16))
+    logger.info("device: {} n_gpu: {}".format(device, n_gpu))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
@@ -691,7 +692,8 @@ def test(args):
     # Optimizer
     optimizer = get_optimizer(
         model,
-        float16=args.fp16,
+        # float16=args.fp16,
+        float16=False,
         learning_rate=args.learning_rate,
         total_steps=num_steps,
         schedule='warmup_linear',
@@ -720,7 +722,6 @@ def test(args):
     all_results = []
     for batch in tqdm(dataloader, desk='Testing', disable=None, mininterval=5.0):
         input_ids, input_masks, segment_ids, choice_masks, example_indices = batch
-        # input_ids, input_masks, segment_ids, choice_masks, example_indices = expand_features(batch, is_training=False)
         if len(all_results) == 0:
             print(f'shape of input_ids: {input_ids.shape}')
         input_ids = input_ids.to(device)

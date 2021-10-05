@@ -11,7 +11,7 @@ class Job:
     def __init__(self, task: str, tokenizer: str, ckpt: str, seed: int,
                  debug=False, two_level_embeddings=False, use_base=False,
                  use_long=False, use_shuffled=False, use_sp=False, use_cws=False,
-                 use_no_index=False, use_byte=False, use_random_index=False,
+                 use_no_index=False,
                  classification_split_char=False, noise_type=None, 
                  noise_train=None, noise_test=None, fewshot=False):
         self.task = task
@@ -27,8 +27,6 @@ class Job:
         self.use_sp = use_sp
         self.use_no_index = use_no_index
         self.use_cws = use_cws
-        self.use_byte = use_byte
-        self.use_random_index = use_random_index
         self.classification_split_char = classification_split_char
         self.noise_type = noise_type
         self.noise_train = noise_train
@@ -60,10 +58,6 @@ class Job:
             return 'Shuffled'
         elif self.use_cws:
             return 'CWS'
-        elif self.use_byte:
-            return 'Byte'
-        elif self.use_random_index:
-            return 'RandomIndex'
         else:
             return consts.TOKENIZER_TYPES[self.tokenizer]
 
@@ -74,8 +68,6 @@ class Job:
             return consts.VOCAB_FILES_SHUFFLED[self.tokenizer]
         if self.use_cws:
             return consts.VOCAB_FILES_CWS[self.tokenizer].format('80')
-        if self.use_byte:
-            return consts.VOC
         return consts.VOCAB_FILES[self.tokenizer]
 
     def is_classification_task(self) -> bool:
@@ -161,6 +153,8 @@ class Job:
             return consts.BEST_CKPTS_NO_INDEX[self.tokenizer]
         elif self.tokenizer == 'pinyin_concat_wubi':
             raise NotImplementedError
+        elif self.use_cws:
+            return consts.BEST_CKPTS_CWS[self.tokenizer]
         else:
             return consts.BEST_CKPTS[self.tokenizer]
 
@@ -199,10 +193,10 @@ class Job:
                 tokenizer += '_shuffled'
             if self.use_no_index:
                 tokenizer += '_no_index'
-            if self.two_level_embeddings:
-                tokenizer += '_twolevel'
             if self.use_cws:
                 tokenizer += '_cws'
+            if self.two_level_embeddings:
+                tokenizer += '_twolevel'
 
             if task == 'drcd':
                 tokenizer += '_trad'  # DRCD always use traditional Chinese
@@ -286,31 +280,6 @@ class Job:
             ret['cws_vocab_file'] = self.cws_vocab_file
         return ret
 
-    def get_cmd(self, script_last=True):
-        cmd = []
-        cmd += ['out_dir=' + self.output_dir]
-        cmd += ['task_name=' + self.task]
-        cmd += ['init_checkpoint=' + self.init_checkpoint]
-        cmd += ['config_file=' + self.config_file]
-        cmd += ['vocab_file=' + self.vocab_file]
-        cmd += ['vocab_model_file=' + self.vocab_model_file]
-        cmd += ['cws_vocab_file=' + self.cws_vocab_file]
-        cmd += ['tokenizer_type=' + self.tokenizer_type]
-        cmd += ['train_dir=' + self.train_dir]
-        cmd += ['dev_dir=' + self.dev_dir]
-        cmd += ['test_dir=' + self.test_dir]
-        cmd += ['seed=' + str(self.seed)]
-        cmd += ['epochs=' + str(6)]   # TODO: update
-        cmd += ['fewshot=' + str(int(self.fewshot))]
-        # cmd += ['convert_to_simplified=' + self.drcd_convert_to_simplified]
-        # cmd += ['batch_size=' + str()]
-        cmd += ['mode=' + self.mode]
-        cmd += ['classification_split_char=' + str(int(self.classification_split_char))]
-        cmd += ['two_level_embeddings=' + str(int(self.two_level_embeddings))]
-        cmd += ['debug=' + str(int(self.debug))]
-        cmd += [self.script]
-        return cmd
-
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -319,21 +288,19 @@ def parse_args():
 
 
 # Change these settings
-USE_SLURM = False		# Don't use this anymore
 DEBUG = False
 DONT_RUN = False
 RUN_IN_BG = False
-START_FROM_CKPT = False	# Not supported
 SLEEP_DURATION = True
 
 TWO_LEVEL_EMBEDDINGS = False
 # USE_BASE = False
 # USE_LONG = False
 USE_SHUFFLED = False
-USE_BYTE = True
-USE_RANDOM_INDEX = False
 USE_NO_INDEX = False
 USE_CWS = False
+USE_500 = True
+
 NOISE_TYPE = None
 # NOISE_TYPE = 'glyph'
 # NOISE_TYPE = 'phonetic'
@@ -353,28 +320,33 @@ NOISE_TEST = [
 ]
 
 SEEDS = [
-    10,
-    # 11, 12, 
-    # 13, 14,
-    # 15, 16, 17, 18, 19,
+    # 10,
+    11, 
+    # 12, 
+    # 13, 
+    # 14,
+    # 15, 
+    # 16, 17, 18, 19,
 ]
 TOKENIZERS = [
     # 'cangjie',
-    # 'pinyin',
+    'pinyin',
     # 'stroke',
-    'wubi',
+    # 'wubi',
     # 'zhengma',
     # 'zhuyin',
     # 'raw',
     # 'bert',
     # 'pinyin_concat_wubi',
+    # 'byte',
+    # 'random_index',
 ]
 
 DO_TRAIN = True
 DO_TEST = True
 FEWSHOT = False
 TASKS = [
-    'tnews',
+    # 'tnews',
     # 'iflytek',
     # 'wsc',
     # 'afqmc',
@@ -387,23 +359,23 @@ TASKS = [
     # 'lcqmc',
     # 'bq',
     # 'thucnews',
-    # 'chid',
+    'chid',
     # 'cluener',
     # 'chinese_nli' ,  # Hu Hai's ChineseNLIProbing
 ]
 
 
-# Assert bound settings
+# Sanity check on settings
 if any(task in ['cmrc', 'drcd', 'cluener'] for task in TASKS):
     assert TWO_LEVEL_EMBEDDINGS
 if any(task not in ['cmrc', 'drcd', 'cluener'] for task in TASKS):
     assert not TWO_LEVEL_EMBEDDINGS
+if USE_NO_INDEX or USE_SHUFFLED:
+    assert all(t in ['pinyin', 'wubi'] for t in TOKENIZERS)
 if NOISE_TYPE == 'glyph':
     assert NOISE_TEST == [50, 100]
 if NOISE_TYPE == 'phonetic':
     assert NOISE_TEST == [10, 20, 30, 40, 50]
-assert sum([USE_CWS, USE_BYTE, USE_RANDOM_INDEX]) == 1
-
 
 
 def submit_job(task: str, tokenizer: str, ckpt: str, seed: int, **kwargs):
@@ -435,6 +407,8 @@ def submit_job(task: str, tokenizer: str, ckpt: str, seed: int, **kwargs):
 def get_best_ckpt(tokenizer):
     if tokenizer == 'pinyin_concat_wubi':
         return 'ckpt_8840'
+    elif USE_500:
+        return consts.BEST_CKPTS_500[tokenizer]
     elif USE_NO_INDEX:
         return consts.BEST_CKPTS_NO_INDEX[tokenizer]
     elif USE_SHUFFLED:
@@ -483,6 +457,7 @@ def finetune():
                            use_no_index=USE_NO_INDEX,
                         #    use_sp=USE_SP,
                            use_cws=USE_CWS,
+                           use_500=USE_500,
                         #    classification_split_char=CLASSIFICATION_SPLIT_CHAR
                            )
 

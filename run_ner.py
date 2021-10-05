@@ -24,18 +24,11 @@ from schedulers import LinearWarmUpScheduler
 from ner.callback.optimizater.adamw import AdamW
 from ner.callback.lr_scheduler import get_linear_schedule_with_warmup
 from ner.callback.progressbar import ProgressBar
-from ner.tools.common import seed_everything,json_to_text
-# from ner.tools.common import init_logger, logger
+from ner.tools.common import json_to_text
 from ner.tools.finetuning_argparse import get_argparse
 
-from ner.models.transformers import (
-    # WEIGHTS_NAME, 
-    BertConfig, 
-    # AlbertConfig
-)
+from ner.models.transformers import BertConfig
 from ner.models.bert_for_ner import BertCrfForNer
-# from ner.models.albert_for_ner import AlbertCrfForNer
-# from ner.processors.utils_ner import CNerTokenizer, get_entities
 from ner.processors.utils_ner import get_entities, get_char_labels
 from ner.processors.ner_seq import convert_examples_to_features
 from ner.processors.ner_seq import ner_processors as processors
@@ -57,187 +50,6 @@ SEP_TOKEN = '[SEP]'
 PAD_TOKEN = '[PAD]'
 
 collate_fn = get_collate_fn(TWO_LEVEL_EMBEDDINGS)
-
-
-def train_old(args, train_dataset, model, tokenizer):
-    """ Train the model """
-
-    device = 'cuda' if torch.cuda.is_available else 'cpu'
-    # args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
-    # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    train_sampler = RandomSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, 
-                                  sampler=train_sampler, 
-                                  batch_size=args.train_batch_size,
-                                  collate_fn=collate_fn)
-    # if args.max_steps > 0:
-    #     n_train_steps = args.max_steps
-    #     args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
-    # else:
-    #     n_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
-    n_train_steps = len(train_dataloader) * args.epochs
-    # Prepare optimizer and schedule (linear warmup and decay)
-    no_decay = ["bias", "LayerNorm.weight"]
-    bert_param_optimizer = list(model.bert.named_parameters())
-    crf_param_optimizer = list(model.crf.named_parameters())
-    linear_param_optimizer = list(model.classifier.named_parameters())
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in bert_param_optimizer if not any(nd in n for nd in no_decay)],
-         'weight_decay': args.weight_decay, 'lr': args.learning_rate},
-        {'params': [p for n, p in bert_param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-         'lr': args.learning_rate},
-
-        {'params': [p for n, p in crf_param_optimizer if not any(nd in n for nd in no_decay)],
-         'weight_decay': args.weight_decay, 'lr': args.crf_learning_rate},
-        {'params': [p for n, p in crf_param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-         'lr': args.crf_learning_rate},
-
-        {'params': [p for n, p in linear_param_optimizer if not any(nd in n for nd in no_decay)],
-         'weight_decay': args.weight_decay, 'lr': args.crf_learning_rate},
-        {'params': [p for n, p in linear_param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-         'lr': args.crf_learning_rate}
-    ]
-    args.warmup_steps = int(n_train_steps * args.warmup_proportion)
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps,
-                                                num_training_steps=n_train_steps)
-    # Check if saved optimizer or scheduler states exist
-    if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
-            os.path.join(args.model_name_or_path, "scheduler.pt")):
-        # Load in optimizer and scheduler states
-        optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
-        scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
-    # if args.fp16:
-    #     try:
-    #         from apex import amp
-    #     except ImportError:
-    #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-    #     model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
-    # # multi-gpu training (should be after apex fp16 initialization)
-    # if args.n_gpu > 1:
-    #     model = torch.nn.DataParallel(model)
-    # # Distributed training (should be after apex fp16 initialization)
-    # if args.local_rank != -1:
-    #     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
-    #                                                       output_device=args.local_rank,
-    #                                                       find_unused_parameters=True)
-    
-    # Train!
-    logger.info("***** Running training *****")
-    logger.info("  Num examples = %d", len(train_dataset))
-    logger.info("  Num Epochs = %d", args.epochs)
-    # logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
-    logger.info(f'  Batch size = {args.train_batch_size}')
-    # logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
-    #             args.train_batch_size
-    #             * args.gradient_accumulation_steps
-    #             * (torch.distributed.get_world_size() if args.local_rank != -1 else 1),
-    #             )
-    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
-    logger.info("  Total optimization steps = %d", n_train_steps)
-
-    global_step = 0
-    # steps_trained_in_current_epoch = 0
-    # # Check if continuing training from a checkpoint
-    # if os.path.exists(args.model_name_or_path) and "checkpoint" in args.model_name_or_path:
-    #     # set global_step to gobal_step of last saved checkpoint from model path
-    #     global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
-    #     epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
-    #     steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
-    #     logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-    #     logger.info("  Continuing training from epoch %d", epochs_trained)
-    #     logger.info("  Continuing training from global step %d", global_step)
-    #     logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
-
-    train_loss, logging_loss = 0.0, 0.0
-
-    train_loss_history = 0
-    dev_loss_history = 0
-
-    model.zero_grad()
-    utils.set_seed(args.seed)
-    # seed_everything(args.seed)  # Added here for reproductibility (even between python 2 and 3)
-    for ep in range(args.epochs):
-        model.train()
-        model.zero_grad()
-        pbar = ProgressBar(n_total=len(train_dataloader), desc='Training')
-        for step, batch in enumerate(train_dataloader):
-            # Skip past any already trained steps if resuming training
-            # if steps_trained_in_current_epoch > 0:
-            #     steps_trained_in_current_epoch -= 1
-            #     continue
-            # model.train()
-            batch = tuple(t.to(args.device) for t in batch)
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask": batch[1],
-                'token_type_ids': batch[2],
-                "labels": batch[3],
-                'input_lens': batch[4],
-            }
-            # inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3], 'input_lens': batch[4]}
-            # if args.model_type != "distilbert":
-            #     # XLM and RoBERTa don"t use segment_ids
-            #     inputs["token_type_ids"] = (batch[2] if args.model_type in ["bert", "xlnet"] else None)
-            outputs = model(**inputs)
-            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
-            # if args.n_gpu > 1:
-            #     loss = loss.mean()  # mean() to average on multi-gpu parallel training
-            # if args.gradient_accumulation_steps > 1:
-            #     loss = loss / args.gradient_accumulation_steps
-            # if args.fp16:
-            #     with amp.scale_loss(loss, optimizer) as scaled_loss:
-            #         scaled_loss.backward()
-            # else:
-            #     loss.backward()
-            loss /= args.gradient_accumulation_steps
-            loss.backward()
-
-            pbar(step, {'loss': loss.item()})
-            train_loss += loss.item()
-            if (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1 == len(train_dataloader)):
-                # if args.fp16:
-                #     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
-                # else:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                scheduler.step()  # Update learning rate schedule
-                optimizer.step()
-                model.zero_grad()
-                global_step += 1
-                # if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                #     # Log metrics
-                #     print(" ")
-                #     if args.local_rank == -1:
-                #         # Only evaluate when single GPU otherwise metrics may not average well
-                #         evaluate(args, model, tokenizer)
-                # if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                #     # Save model checkpoint
-                #     output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
-                #     if not os.path.exists(output_dir):
-                #         os.makedirs(output_dir)
-                #     model_to_save = (
-                #         model.module if hasattr(model, "module") else model
-                #     )  # Take care of distributed/parallel training
-                #     model_to_save.save_pretrained(output_dir)
-                #     torch.save(args, os.path.join(output_dir, "training_args.bin"))
-                #     logger.info("Saving model checkpoint to %s", output_dir)
-                #     tokenizer.save_vocabulary(output_dir)
-                #     torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                #     torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                #     logger.info("Saving optimizer and scheduler states to %s", output_dir)
-        logger.info("\n")
-
-        # Evaluation
-        logger.info('*** Evaluation ***')
-        logger.info(f'  Epoch = {ep}')
-        logger.info(f'  Num examples = {len(dev_examples)}')
-        logger.info(f'  Batch size = {args.eval_batch_size}')
-
-        
-
-        if 'cuda' in str(device):
-            torch.cuda.empty_cache()
-    return global_step, train_loss / global_step
 
 
 def get_char_preds(model, dataloader, device, id2label):
@@ -308,78 +120,6 @@ def get_truth(dataloader):
     return char_labels
 
 
-def diff_tokenizer(args, model, dataset, id2label, device, tokenizer):
-    processor = processors['cluener']()
-    tokenizer_bert = ALL_TOKENIZERS['BertZh'](
-        "/home/chenyingfa/WubiBERT/tokenizers/bert_chinese_uncased_22675.vocab",
-        "null")
-    dataset_bert = get_dataset(
-        args.task_name, 
-        args.test_dir,
-        tokenizer_bert, 
-        tokenizer_name='bert', 
-        data_type='test', 
-        max_seq_len=args.eval_max_seq_length,
-        two_level_embeddings=TWO_LEVEL_EMBEDDINGS)
-    # Load best model
-    best_model_filename = os.path.join('logs/cluener/bert/ckpt_8601/10/', consts.FILENAME_BEST_MODEL)
-    logger.info(f'Loading model from "{best_model_filename}"')
-    model_bert = load_model(args.config_file, best_model_filename, len(processor.get_labels()))
-    logger.info(f'Loaded model')
-    model_bert.to(device)
-
-    dataloader_bert = DataLoader(
-        dataset_bert,
-        sampler=SequentialSampler(dataset_bert),
-        batch_size=args.eval_batch_size,
-        collate_fn=collate_fn)
-
-    metric = SeqEntityScore(id2label, markup=args.markup)
-    sampler = SequentialSampler(dataset)
-    dataloader = DataLoader(
-        dataset,
-        sampler=sampler,
-        batch_size=args.eval_batch_size,
-        collate_fn=collate_fn)
-
-
-    # Evaluation
-    total_eval_loss = 0.0
-    n_eval_steps = 0
-
-    char_preds, token_preds = get_char_preds(model, dataloader, device, id2label)
-    char_preds_bert, _ = get_char_preds(model_bert, dataloader_bert, device, id2label)
-    truth = get_truth(dataloader_bert)
-    examples = get_examples('test', args.test_dir)
-
-    char_preds = char_preds[:50]
-    char_preds_bert = char_preds_bert[:50]
-
-    tokens = get_tokens(tokenizer, args.test_dir, 'test', args.eval_max_seq_length)
-    tokens_bert = get_tokens(tokenizer_bert, args.test_dir, 'test', args.eval_max_seq_length)
-
-    diff_idx = []
-    for i in range(len(char_preds)):
-        b = char_preds_bert[i][:len(char_preds[i])]
-        if char_preds[i] != b:
-            print('')
-            print(f'Example {i}')
-            print(f'  predictions:')
-            print(f'    text:        {examples[i].text_a}')
-            print(f'    truth:       {truth[i]}')
-            print(f'    token preds: {token_preds[i]}')
-            print(f'    pinyin:      {char_preds[i]}')
-            print(f'    bert:        {b}\n')
-            print(f'  tokens:')
-            print(f'    pinyin:      {tokens[i]}')
-            print(f'    bert:        {tokens_bert[i]}')
-            diff_idx.append(i)
-    
-    print('')
-    print(diff_idx, len(diff_idx))
-    exit()
-
-
 def evaluate(args, model, dataset, id2label, device, dump_preds=False, two_level_embeddings=True):
     metric = SeqEntityScore(id2label, markup=args.markup)
     sampler = SequentialSampler(dataset)
@@ -412,31 +152,13 @@ def evaluate(args, model, dataset, id2label, device, dump_preds=False, two_level
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
             tags = model.crf.decode(logits, inputs['attention_mask'])
-        # if args.n_gpu > 1:
-        #     tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
         total_eval_loss += tmp_eval_loss.item()
         n_eval_steps += 1
 
         # NOTE: labels of tokens might not match char labels from dataset
         out_label_ids = inputs['labels'].cpu().numpy().tolist()  # Token labels
-        # out_label_ids = batch[5].cpu().numpy().tolist()  # Char labels
-
-        # token_label_ids = inputs['labels'].cpu().numpy().tolist()  # Token labels
-        # char_label_ids = batch[5].cpu().numpy().tolist()  # Char labels
-        # for i in range(len(char_label_ids)):
-        #     if token_label_ids[i] != char_label_ids[i]:
-        #         print(token_label_ids[i])
-        #         print(char_label_ids[i])
-        #         exit()
         input_lens = inputs['input_lens'].cpu().numpy().tolist()
         tags = tags.squeeze(0).cpu().numpy().tolist()
-
-        # Convert to char labels, for exact comparison with labels in dataset
-        # inv_idx = inputs['inv_idx'].cpu().numpy().tolist()
-        # left_index = batch[6].cpu().numpy().tolist()
-        # right_index = batch[7].cpu().numpy().tolist()
-        # old_tags = tags
-        # tags = [get_char_labels(tags[i], left_index[i], right_index[i], id2label) for i in range(len(tags))]
 
         for i, label in enumerate(out_label_ids):
             temp_1 = []
@@ -681,10 +403,6 @@ def train(args):
     logger.info(f'device: {device}')
     logger.info(f'Set seed: {args.seed}')
     utils.set_seed(args.seed)
-    
-    # logger.warning(
-    #     "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-    #     args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16, )
 
     # Load pretrained model and tokenizer
     tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
@@ -693,19 +411,6 @@ def train(args):
     id2label = {i: label for i, label in enumerate(label_list)}  # For evaluation
     num_labels = len(label_list)
 
-    # if args.local_rank not in [-1, 0]:
-    #     torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
-    # args.model_type = args.model_type.lower()
-    # config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    # config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
-    #                                       num_labels=num_labels, cache_dir=args.cache_dir if args.cache_dir else None, )
-    # tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
-    #                                             do_lower_case=args.do_lower_case,
-    #                                             cache_dir=args.cache_dir if args.cache_dir else None, )
-    # model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path),
-    #                                     config=config, cache_dir=args.cache_dir if args.cache_dir else None)
-	# if args.local_rank == 0:
-    #     torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
     logger.info(f'Loading model from "{args.init_checkpoint}"')
     model = load_model(args.config_file, args.init_checkpoint, num_labels)
     logger.info('Loaded model')
@@ -717,7 +422,6 @@ def train(args):
         f.write(model.config.to_json_string())
 
     # Train and dev data
-    # tokenizer_name = utils.output_dir_to_tokenizer_name(output_dir)
     train_dataset = get_dataset(
         args.task_name, 
         args.train_dir,
@@ -912,9 +616,7 @@ def test(args):
     logger.info('*** Testing ***')
     logger.info(f'  Num examples = {len(dataset)}')
     logger.info(f'  Batch size = {args.eval_batch_size}')
-    # diff_tokenizer(args, model, dataset, id2label, device, tokenizer)
     result = evaluate(args, model, dataset, id2label, device, TWO_LEVEL_EMBEDDINGS)
-    # exit()
     
     acc = result['acc']
     f1 = result['f1']

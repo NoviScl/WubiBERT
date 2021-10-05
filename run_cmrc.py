@@ -26,10 +26,8 @@ from tokenization import (
 )
 from optimization import BertAdam, warmup_linear, get_optimizer
 from schedulers import LinearWarmUpScheduler
-import utils
-from utils import (
-    json_load_by_line, json_save_by_line, mkdir, get_freer_gpu, get_device, output_dir_to_tokenizer_name
-)
+from utils import (json_load_by_line, json_save_by_line, mkdir, get_freer_gpu, 
+                   get_device, output_dir_to_tokenizer_name, load_tokenizer)
 from run_pretraining import pretraining_dataset, WorkerInitObj
 
 from mrc.google_albert_pytorch_modeling import AlbertConfig, AlbertForMRC
@@ -132,6 +130,7 @@ def parse_args():
     parser.add_argument('--tokenizer_type', type=str, required=True)
     parser.add_argument('--vocab_file', type=str, required=True)
     parser.add_argument('--vocab_model_file', type=str, required=True)
+    parser.add_argument('--cws_vocab_file', type=str, default=None)
     parser.add_argument('--output_dir', type=str, default='logs/temp')
     parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
     parser.add_argument('--do_test', action='store_true', help='Whether to test.')
@@ -293,7 +292,7 @@ def gen_examples_and_features(
         features = convert_examples_to_features(
             examples,
             tokenizer,
-            is_training=is_training,
+            # is_training=is_training,
             max_seq_length=max_seq_length,
             two_level_embeddings=two_level_embeddings,
         )
@@ -354,8 +353,8 @@ def train(args):
 
     # Tokenizer
     logger.info('Loading tokenizer...')
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
-    real_tokenizer_type = output_dir_to_tokenizer_name(args.output_dir)
+    # tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = load_tokenizer(args)
     logger.info('Loaded tokenizer')
 
     # Because tokenizer_type is a part of the feature file name,
@@ -565,7 +564,8 @@ def test(args):
 
     # Tokenizer
     logger.info('Loading tokenizer...')
-    tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    # tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
+    tokenizer = load_tokenizer(args)
     logger.info('Loaded tokenizer')
 
     # Because tokenizer_type is a part of the feature file name,

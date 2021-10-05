@@ -4,6 +4,9 @@ Utility functions for chinese MRC tasks
 import collections
 from tqdm import tqdm
 
+SPIECE_UNDERLINE = '▁'
+
+
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
                          orig_answer_text):
     """Returns tokenized answer spans that better match the annotated answer."""
@@ -76,6 +79,50 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
             best_span_index = span_index
 
     return cur_span_index == best_span_index
+
+
+def _is_chinese_char(cp):
+    if ((cp >= 0x4E00 and cp <= 0x9FFF) or  #
+        (cp >= 0x3400 and cp <= 0x4DBF) or  #
+        (cp >= 0x20000 and cp <= 0x2A6DF) or  #
+        (cp >= 0x2A700 and cp <= 0x2B73F) or  #
+        (cp >= 0x2B740 and cp <= 0x2B81F) or  #
+        (cp >= 0x2B820 and cp <= 0x2CEAF) or
+        (cp >= 0xF900 and cp <= 0xFAFF) or  #
+        (cp >= 0x2F800 and cp <= 0x2FA1F)):  #
+        return True
+
+    return False
+
+
+def is_fuhao(c):
+    if c == '。' or c == '，' or c == '！' or c == '？' or c == '；' or c == '、' or c == '：' or c == '（' or c == '）' \
+            or c == '－' or c == '~' or c == '「' or c == '《' or c == '》' or c == ',' or c == '」' or c == '"' or c == '“' or c == '”' \
+            or c == '$' or c == '『' or c == '』' or c == '—' or c == ';' or c == '。' or c == '(' or c == ')' or c == '-' or c == '～' or c == '。' \
+            or c == '‘' or c == '’' or c == '─' or c == ':':
+        return True
+    return False
+
+
+def _tokenize_chinese_chars(text):
+    """Adds whitespace around any CJK character."""
+    output = []
+    for char in text:
+        cp = ord(char)
+        if _is_chinese_char(cp) or is_fuhao(char):
+            if len(output) > 0 and output[-1] != SPIECE_UNDERLINE:
+                output.append(SPIECE_UNDERLINE)
+            output.append(char)
+            output.append(SPIECE_UNDERLINE)
+        else:
+            output.append(char)
+    return "".join(output)
+
+
+def is_whitespace(c):
+    if c in [" ", "\t", "\r", "\n", SPIECE_UNDERLINE, '\u3000', '\u2009'] or ord(c) == 0x202F:
+        return True
+    return False
 
 
 def get_subchar_pos(tokens, subchars):

@@ -8,11 +8,6 @@ config_file=${config_file:-"configs/bert_config_vocab30k.json"}
 vocab_file=${vocab_file:-"tokenizers/sp_wubi_zh_30k_sep.vocab"}
 vocab_model_file=${vocab_model_file:-"tokenizers/sp_wubi_zh_30k_sep.model"}
 tokenizer_type=${tokenizer_type:-"WubiZh"}
-# init_checkpoint=${init_checkpoint:-"results/checkpoints_bert_zh_22675/ckpt_8601.pt"}
-# config_file=${config_file:-"configs/bert_config_vocab22675.json"}
-# vocab_file=${vocab_file:-"tokenizers/bert_chinese_uncased_22675.vocab"}
-# vocab_model_file=${vocab_model_file:-"tokenizers/bert_chinese_uncased_22675.model"}
-tokenizer_type=${tokenizer_type:-"BertZh"}
 
 data_dir=${data_dir:-"datasets/$task_name/split"}
 out_dir=${out_dir:-"logs/$task_name/wubi_zh"}
@@ -29,10 +24,8 @@ mkdir -p $out_dir
 CMD="python3 "
 CMD+="run_c3.py "
 
-# CMD+="--task_name ${task_name} "
 if [[ $mode == *"train"* ]] ; then
   CMD+="--do_train "
-  # CMD+="--train_batch_size=$batch_size "
 fi
 if [[ $mode == *"eval"* ]] || [[ $mode == *"test"* ]]; then
   if [[ $mode == *"eval"* ]] ; then
@@ -41,7 +34,6 @@ if [[ $mode == *"eval"* ]] || [[ $mode == *"test"* ]]; then
   if [[ $mode == *"test"* ]] ; then
     CMD+="--do_test "
   fi
-  # CMD+="--eval_batch_size=$batch_size "
 fi
 
 if [[ $test_model != "" ]] ; then
@@ -73,6 +65,3 @@ fi
 LOGFILE=$out_dir/$seed/logfile
 
 $CMD |& tee $LOGFILE
-
-#   --output_dir=$OUTPUT_DIR/$TASK_NAME/$MODEL_NAME/ \
-#   --gpu_ids="0,1,2,3" \

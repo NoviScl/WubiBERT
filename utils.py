@@ -112,6 +112,8 @@ def output_dir_to_tokenizer_name(output_dir):
         'zhuyin',
         'raw',
         'bert',
+        'byte',
+        'random_index',
     ]
     out_dir = output_dir.split(os.path.sep)[-2]
     for t in tokenizer_types:

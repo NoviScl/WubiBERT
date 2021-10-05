@@ -13,6 +13,8 @@ VOCAB_FILES = {
     'raw': 'tokenizers/raw_zh_22675.vocab', 
     'bert': 'tokenizers/bert_chinese_uncased_22675.vocab', 
     'pinyin_concat_wubi': 'tokenizers/pinyin_concat_wubi_22675.vocab',
+    'byte': 'tokenizers/byte_22675.vocab',
+    'random_index': 'tokenizers/random_index_22675.vocab',
 }
 
 # Returns a string template
@@ -43,8 +45,9 @@ TOKENIZER_TYPES = {
     'pinyin_no_index': 'CommonZhNoIndex',
     'wubi_no_index': 'CommonZhNoIndex',
     'pinyin_concat_wubi': 'PinyinConcatWubi',
+    'byte': 'Byte',
+    'random_index': 'RandomIndex',
 }
-
 
 MODEL_NAMES = [
     'cangjie',
@@ -77,6 +80,15 @@ BEST_CKPTS = {
     'cws_wubi': "ckpt_8804",
     'cws_zhuyin': "ckpt_8804",
     'pinyin_concat_wubi': 'ckpt_8840',
+    'byte': 'ckpt_8840',
+    'random_index': 'ckpt_8840',
+}
+
+BEST_CKPTS_500 = {
+    'pinyin': 'ckpt_7420',
+    'wubi': 'ckpt_7420',
+    'byte': 'ckpt_7420',
+    'random_index': 'ckpt_7420',
 }
 
 BEST_CKPTS_NO_INDEX = {
@@ -94,10 +106,12 @@ BEST_CKPTS_CWS = {
     'wubi': 'ckpt_8840',
 }
 
-BEST_CKPT_BYTE = 'ckpt_8840'
-BEST_CKPT_RANDOM_INDEX = 'ckpt_8840'
-DIR_CKPTS_BYTE = 'checkpoints/ckpts_byte_22675'
-DIR_CKPTS_RANDOM_INDEX = 'checkpoints/ckpts_random_index_22675'
+# VOCAB_FILE_BYTE = 'tokenizers/byte_22675.vocab'
+# VOCAB_FILE_RANDOM_INDEX = 'tokenizers/random_index_22675.vocab'
+# BEST_CKPT_BYTE = 'ckpt_8840'
+# BEST_CKPT_RANDOM_INDEX = 'ckpt_8840'
+# DIR_CKPTS_BYTE = 'checkpoints/ckpts_byte_22675'
+# DIR_CKPTS_RANDOM_INDEX = 'checkpoints/ckpts_random_index_22675'
 
 
 DIR_CKPT_SP = {
@@ -117,6 +131,20 @@ DIR_CKPTS = {
     "raw": "checkpoints/checkpoints_raw_zh_22675",
     "bert": "checkpoints/checkpoints_bert_zh_22675",
     "pinyin_concat_wubi": "checkpoints/checkpoints_pinyin_concat_wubi",
+    'byte': 'checkpoints/ckpts_byte_22675',
+    'random_index': 'checkpoints/ckpts_random_index_22675',
+}
+
+DIR_CKPTS_500 = {
+    'pinyin': 'checkpoints/checkpoints_pinyin_500',
+    'wubi': 'checkpoints/checkpoints_wubi_500',
+    'byte': 'checkpoints/checkpoints_byte_500',
+    'random_index': 'checkpoints/checkpoints_random_index_500',
+}
+
+DIR_CKPTS_SHUFFLED_500 = {
+    'pinyin': 'checkpoints/checkpoints_pinyin_shuffled_500',
+    'wubi': 'checkpoints/checkpoints_wubi_shuffled_500',
 }
 
 DIR_CKPTS_CWS = {

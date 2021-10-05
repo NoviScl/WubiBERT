@@ -55,8 +55,6 @@ CMD+="--train_max_seq_length $max_seq_length "
 CMD+="--eval_max_seq_length $max_seq_length "
 CMD+="--learning_rate $learning_rate "
 
-CMD+="--do_lower_case "
-
 LOGFILE="${out_dir}/${seed}/logfile"
 
 $CMD |& tee $LOGFILE
