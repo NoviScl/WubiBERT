@@ -24,27 +24,27 @@ import os
 import random
 import json
 import time
-from shutil import copyfile
+# from shutil import copyfile
 
 import numpy as np
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
+# from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm
 
 import consts
-from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+# from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
-from tokenization import (
-    ALL_TOKENIZERS,
-    BertTokenizer, 
-    ConcatSepTokenizer, 
-    WubiZhTokenizer, 
-    RawZhTokenizer, 
-    BertZhTokenizer, 
-    CommonZhTokenizer,
-)
+# from tokenization import (
+#     ALL_TOKENIZERS,
+#     BertTokenizer, 
+#     ConcatSepTokenizer, 
+#     WubiZhTokenizer, 
+#     RawZhTokenizer, 
+#     BertZhTokenizer, 
+#     CommonZhTokenizer,
+# )
 from optimization import BertAdam, warmup_linear
 from schedulers import LinearWarmUpScheduler
 from apex import amp
@@ -53,7 +53,7 @@ import utils
 from utils import (is_main_process, mkdir_by_main_process, format_step,
                    get_world_size, get_freer_gpu)
 from processors.glue import PROCESSORS, convert_examples_to_features
-from run_pretraining import pretraining_dataset, WorkerInitObj
+# from run_pretraining import pretraining_dataset, WorkerInitObj
 
 torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
@@ -348,7 +348,6 @@ def load_model(config_file, filename, num_labels):
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
     model = modeling.BertForSequenceClassification(config, num_labels=num_labels)
-    print('filename =', filename)
     state_dict = torch.load(filename, map_location='cpu')
     model.load_state_dict(state_dict["model"], strict=False)
     return model
@@ -379,6 +378,51 @@ def expand_batch(batch, two_level_embeddings):
         pos_right = None
     return (input_ids, input_mask, segment_ids, label_ids,
             token_ids, pos_left, pos_right)
+
+
+
+def evaluate(model, tokenizer, loss_fct, args, features, labels, device):
+    '''Return (preds, labels, loss)'''
+    num_labels = len(labels)
+    dataset = gen_tensor_dataset(features, two_level_embeddings=args.two_level_embeddings)
+    sampler = SequentialSampler(dataset)
+    dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.eval_batch_size,)
+    
+    model.eval()
+    loss_fct = torch.nn.CrossEntropyLoss()
+    all_logits = None
+    all_label_ids = None
+    total_loss = 0
+    num_steps = 0
+    for i, batch in tqdm(enumerate(dataloader), desc="Evaluating",
+                         total=len(dataloader), mininterval=2.0):
+        batch = tuple(t.to(device) for t in batch)
+        (input_ids, input_mask, segment_ids, label_ids,
+         token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
+        with torch.no_grad():
+            logits = model(input_ids, segment_ids, input_mask,
+                           token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+                           use_token_embeddings=args.two_level_embeddings)
+            
+            total_loss += loss_fct(
+                logits.view(-1, num_labels),
+                label_ids.view(-1),
+            ).mean().item()
+
+        num_steps += 1
+        if all_logits is None:
+            all_logits = logits.detach().cpu().numpy()
+            all_label_ids = label_ids.detach().cpu().numpy()
+        else:
+            all_logits = np.append(all_logits, logits.detach().cpu().numpy(), axis=0)
+            all_label_ids = np.append(
+                all_label_ids,
+                label_ids.detach().cpu().numpy(),
+                axis=0,
+            )
+    loss = total_loss / num_steps if num_steps != 0 else -1
+    preds = np.argmax(all_logits, axis=1)
+    return preds, all_label_ids, loss
 
 
 def train(args):
@@ -418,8 +462,6 @@ def train(args):
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
     logger.info('Loading model from "{}"...'.format(args.init_checkpoint))
     model = load_model(args.config_file, args.init_checkpoint, num_labels)
-    logger.info('Loaded model from "{}"'.format(args.init_checkpoint))
-
     model.to(device)
 
     # Prepare optimizer
@@ -433,12 +475,18 @@ def train(args):
         False,
     )
     loss_fct = torch.nn.CrossEntropyLoss()
+    
+    # Start timer
+    start_time = time.time()
 
     logger.info("***** Running training *****")
-    logger.info('  Num epochs = %d', args.epochs)
-    logger.info("  Num examples = %d", len(train_features))
-    logger.info("  Batch size = %d", args.train_batch_size)
-    logger.info("  Num steps = %d", num_train_optimization_steps)
+    logger.info("Num epochs = %d", args.epochs)
+    logger.info("Num train examples = %d", len(train_features))
+    # logger.info("  Num eval examples = %d", len(eval_examples))
+    logger.info("Train batch size = %d", args.train_batch_size)
+    logger.info("Eval batch size = %d", args.eval_batch_size)
+    logger.info("Num steps = %d", num_train_optimization_steps)
+    logger.info("****************************")
 
     train_data = gen_tensor_dataset(train_features, two_level_embeddings=args.two_level_embeddings)
     train_sampler = RandomSampler(train_data)
@@ -460,6 +508,8 @@ def train(args):
     eval_acc_history = []
     train_loss_history = []
     eval_loss_history = []
+    
+    # Init file for scores logging (write header row)
     filename_scores = os.path.join(output_dir, "scores.txt")
     with open(filename_scores, 'w') as f:
         f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
@@ -468,18 +518,17 @@ def train(args):
     model_to_save = model.module if hasattr(model, 'module') else model
     filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
 
-    for ep in trange(int(args.epochs), desc="Epoch"):
+    for ep in range(args.epochs):
         # Train
         model.train()
         total_train_loss, num_train_steps = 0, 0
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+        desc = "Training (epoch " + str(ep) + ")"
+        for step, batch in tqdm(enumerate(train_dataloader), 
+                                total=len(train_dataloader), desc=desc, 
+                                mininterval=2.0):
             batch = tuple(t.to(device) for t in batch)
             (input_ids, input_mask, segment_ids, label_ids,
              token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
-            if args.two_level_embeddings:
-                assert token_ids is not None
-            else:
-                assert token_ids is None
 
             logits = model(input_ids, segment_ids, input_mask,
                             token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
@@ -499,11 +548,6 @@ def train(args):
             num_train_examples += input_ids.size(0)
             num_train_steps += 1
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                # if args.fp16:
-                #     # modify learning rate with special warm up for BERT
-                #     # which FusedAdam doesn't do
-                #     scheduler.step()
-
                 optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
@@ -512,139 +556,92 @@ def train(args):
         train_loss_history.append(train_loss)
 
         # Evaluation
-        if args.do_eval and is_main_process():
-            eval_examples = processor.get_dev_examples(args.dev_dir)
-            eval_features, label_map = convert_examples_to_features(
-                eval_examples,
-                processor.get_labels(),
-                args.max_seq_length,
-                tokenizer,
-                two_level_embeddings=args.two_level_embeddings,
-            )
-            logger.info("***** Running evaluation *****")
-            logger.info("  Epoch = %d", ep)
-            logger.info("  Num examples = %d", len(eval_examples))
-            logger.info("  Batch size = %d", args.eval_batch_size)
-            eval_data = gen_tensor_dataset(eval_features, two_level_embeddings=args.two_level_embeddings)
-            # Run prediction for full data
-            eval_sampler = SequentialSampler(eval_data)
-            eval_dataloader = DataLoader(
-                eval_data,
-                sampler=eval_sampler,
-                batch_size=args.eval_batch_size,
-            )
-
-            model.eval()
-            preds = None
-            out_label_ids = None
-            total_eval_loss = 0
-            num_eval_steps, num_eval_examples = 0, 0
-            for i, batch in tqdm(enumerate(eval_dataloader), desc="Evaluating"):
-                batch = tuple(t.to(device) for t in batch)
-                (input_ids, input_mask, segment_ids, label_ids,
-                 token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
-
-                if args.two_level_embeddings:
-                    assert token_ids is not None
-                else:
-                    assert token_ids is None
-
-                with torch.no_grad():
-                    # cuda_events[i][0].record()
-                    logits = model(input_ids, segment_ids, input_mask,
-                                   token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                                   use_token_embeddings=args.two_level_embeddings)
-                    # cuda_events[i][1].record()
-                    if args.do_eval:
-                        total_eval_loss += loss_fct(
-                            logits.view(-1, num_labels),
-                            label_ids.view(-1),
-                        ).mean().item()
-
-                num_eval_steps += 1
-                num_eval_examples += input_ids.size(0)
-
-                # Get preds and output ids
-                if preds is None:
-                    preds = logits.detach().cpu().numpy()
-                    out_label_ids = label_ids.detach().cpu().numpy()
-                else:
-                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                    out_label_ids = np.append(
-                        out_label_ids,
-                        label_ids.detach().cpu().numpy(),
-                        axis=0,
-                    )
-
-            preds = np.argmax(preds, axis=1)
-
-            # Log and update results
-            eval_acc = compute_metrics(args.task_name, preds, out_label_ids)['acc']
-            eval_loss = total_eval_loss / (num_eval_steps + 1e-10)
+        labels = processor.get_labels()
+        eval_examples = processor.get_dev_examples(args.dev_dir)
+        eval_features, label_map = convert_examples_to_features(
+            eval_examples, labels, args.max_seq_length, tokenizer,
+            two_level_embeddings=args.two_level_embeddings)
             
-            # Log
-            if is_main_process():
-                logger.info("***** Results *****")
-                logger.info(f'train loss: {train_loss}')
-                logger.info(f'eval loss:  {eval_loss}')
-                logger.info(f'eval acc:   {eval_acc}')
+        logger.info("***** Running evaluation *****")
+        logger.info("  Num examples = %d", len(eval_examples))
 
-            eval_loss_history.append(eval_loss)
-            eval_acc_history.append(eval_acc)
+        eval_result = evaluate(model, tokenizer, loss_fct, args,
+                                eval_features, labels, device)
+        preds, all_label_ids, eval_loss = eval_result
 
-            with open(filename_scores, 'w') as f:
-                f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
-                for i in range(ep + 1):
-                    train_loss = train_loss_history[i]
-                    eval_loss = eval_loss_history[i]
-                    eval_acc = eval_acc_history[i]
-                    f.write(f"{i}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
+        # Log and update results
+        eval_acc = compute_metrics(args.task_name, preds, all_label_ids)['acc']
+        
+        # Log
+        if is_main_process():
+            logger.info("***** Results *****")
+            logger.info(f'train loss: {train_loss}')
+            logger.info(f'eval loss:  {eval_loss}')
+            logger.info(f'eval acc:   {eval_acc}')
+            logger.info("*******************")
+
+        eval_loss_history.append(eval_loss)
+        eval_acc_history.append(eval_acc)
+
+        # Log scores to file
+        with open(filename_scores, 'w') as f:
+            f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
+            for i in range(ep + 1):
+                train_loss = train_loss_history[i]
+                eval_loss = eval_loss_history[i]
+                eval_acc = eval_acc_history[i]
+                f.write(f"{i}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
 
 
-        # Save model
-        if is_main_process() and not args.skip_checkpoint:
-            model_to_save = model.module if hasattr(model, 'module') else model
-            model_dir = os.path.join(output_dir, 'models')
-            os.makedirs(model_dir, exist_ok=True)
-            model_filename = os.path.join(model_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
-            torch.save(
-                {"model": model_to_save.state_dict()},
-                model_filename,
-            )
-
-            # Check if it's best model
-            if args.do_eval:
-                if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
-                    best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
-                    copyfile(model_filename, best_model_filename)
-                    logger.info("New best model saved")
+        # Save model if it's best on dev set
+        if args.do_eval and is_main_process() and not args.skip_checkpoint:
+            if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
+                model_to_save = model.module if hasattr(model, 'module') else model
+                model_dir = os.path.join(output_dir, 'models')
+                os.makedirs(model_dir, exist_ok=True)
+                # model_filename = os.path.join(model_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
+                model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
+                torch.save(
+                    {"model": model_to_save.state_dict()},
+                    model_filename,
+                )
+                # copyfile(model_filename, best_model_filename)
+                logger.info("New best model saved")
 
     logger.info('Training finished')
+    
+    # Log time to file
+    stop_time = time.time()
+    elapsed = stop_time - start_time
+    time_stats = {
+        'start_time': str(start_time),
+        'stop_time': str(stop_time),
+        'elapsed': str(elapsed),
+    }
+    time_logfile = os.path.join(output_dir, 'time_log.txt')
+    json.dump(time_stats, open(time_logfile, 'w', encoding='utf8'))
+        
 
 
 def test(args):
     # Setup output files
     output_dir = os.path.join(args.output_dir, str(args.seed))
     device = get_device(args)
-    n_gpu = torch.cuda.device_count()
     utils.set_seed(args.seed)
 
     # Tokenizer and processor
     logger.info('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
+    labels = processor.get_labels()
     num_labels = len(processor.get_labels())
     tokenizer = utils.load_tokenizer(args)
 
     # Load test data
     logger.info('Loading test data from "{}"'.format(args.test_dir))
     examples = processor.get_test_examples(args.test_dir)
-    eval_features, label_map = convert_examples_to_features(
-        examples,
-        processor.get_labels(),
-        args.max_seq_length,
-        tokenizer,
-        two_level_embeddings=args.two_level_embeddings,
-    )
+    features, label_map = convert_examples_to_features(
+        examples, labels, args.max_seq_length, tokenizer,
+        two_level_embeddings=args.two_level_embeddings)
 
     # Load best model
     if args.test_model:
@@ -653,71 +650,17 @@ def test(args):
         best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
     logger.info('Loading model from "{}"...'.format(best_model_filename))
     model = load_model(args.config_file, best_model_filename, num_labels)
-    logger.info('Loaded model from "{}"'.format(best_model_filename))
     model.to(device)
-
-
-    eval_data = gen_tensor_dataset(eval_features, two_level_embeddings=args.two_level_embeddings)
-    # Run prediction for full data
-    eval_sampler = SequentialSampler(eval_data)
-    eval_dataloader = DataLoader(
-        eval_data,
-        sampler=eval_sampler,
-        batch_size=args.eval_batch_size,
-    )
 
     # Test
     logger.info("***** Running Test *****")
-    logger.info("  Num examples = %d", len(examples))
-    logger.info("  Batch size   = %d", args.eval_batch_size)
+    logger.info("Num examples = %d", len(examples))
+    logger.info("Batch size   = %d", args.eval_batch_size)
+    logger.info("************************")
     loss_fct = torch.nn.CrossEntropyLoss()
-    preds = None
-    out_label_ids = None
-    total_eval_loss = 0
-    num_eval_steps, num_eval_examples = 0, 0
-    cuda_events = [(torch.cuda.Event(enable_timing=True),
-                    torch.cuda.Event(enable_timing=True))
-                    for _ in range(len(eval_dataloader))]
 
-    model.eval()
-
-    for i, batch in tqdm(enumerate(eval_dataloader), desc="Evaluating"):
-        batch = tuple(t.to(device) for t in batch)
-        (input_ids, input_mask, segment_ids, label_ids,
-         token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
-
-        if args.two_level_embeddings:
-            assert token_ids is not None
-        else:
-            assert token_ids is None
-
-        with torch.no_grad():
-            cuda_events[i][0].record()
-            logits = model(input_ids, segment_ids, input_mask,
-                           token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                           use_token_embeddings=args.two_level_embeddings)
-            cuda_events[i][1].record()
-            if args.do_eval:
-                total_eval_loss += loss_fct(
-                    logits.view(-1, num_labels),
-                    label_ids.view(-1),
-                ).mean().item()
-
-        num_eval_steps += 1
-        num_eval_examples += input_ids.size(0)
-        if preds is None:
-            preds = logits.detach().cpu().numpy()
-            out_label_ids = label_ids.detach().cpu().numpy()
-        else:
-            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-            out_label_ids = np.append(
-                out_label_ids,
-                label_ids.detach().cpu().numpy(),
-                axis=0,
-            )
-        # print('len(preds) =', len(preds))
-    torch.cuda.synchronize()
-    preds = np.argmax(preds, axis=1)
+    preds, all_label_ids, loss = evaluate(model, tokenizer, loss_fct, args, 
+                                          features, labels, device)
 
     # Save predictions
     dump_predictions(
@@ -726,24 +669,20 @@ def test(args):
         preds,
         examples,
     )
+    acc = compute_metrics(args.task_name, preds, all_label_ids)['acc']
 
-    loss = total_eval_loss / num_eval_steps
-    result = compute_metrics(args.task_name, preds, out_label_ids)
-    acc = result['acc']
-
-    # Save result to file
+    # Save test result to file
     result_file = os.path.join(output_dir, FILENAME_TEST_RESULT)
     with open(result_file, 'w') as f:
         f.write(f'test_loss\ttest_acc\n')
         f.write(f'{loss}\t{acc}\n')
 
-    # Log
+    # Log to console
     if is_main_process():
         logger.info("***** Results *****")
         logger.info(f'Test loss: {loss}')
         logger.info(f'Test acc:  {acc}')
-        for key, val in result.items():
-            logger.info(f'{key}: {val}')
+        logger.info("*******************")
 
     logger.info('Test finished')
 

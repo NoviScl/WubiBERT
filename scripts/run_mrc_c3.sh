@@ -15,6 +15,8 @@ out_dir=${out_dir:-"logs/$task_name/wubi_zh"}
 mode=${mode:-"train eval test"}
 seed=${seed:-2}
 epochs=${epochs:-6}
+batch_size=${batch_size:-24}
+max_seq_len=${max_seq_len:-512}
 # epochs=${epochs:-8}
 test_model=${test_model:-""}
 cws_vocab_file=${cws_vocab_file:-""}
@@ -42,7 +44,7 @@ fi
 
 
 
-CMD+="--num_train_epochs=${epochs} "
+CMD+="--epochs=${epochs} "
 CMD+="--seed=${seed} "
 CMD+="--tokenizer_type=${tokenizer_type} "
 CMD+="--vocab_file=${vocab_file} "
@@ -52,12 +54,12 @@ CMD+="--init_checkpoint=${init_checkpoint} "
 CMD+="--data_dir=${data_dir} "
 CMD+="--output_dir=${out_dir} "
 
-CMD+="--train_batch_size=24 "
-CMD+="--eval_batch_size=24 "
-CMD+="--gradient_accumulation_steps=12 "
+CMD+="--train_batch_size=${batch_size} "
+CMD+="--eval_batch_size=${batch_size} "
+CMD+="--gradient_accumulation_steps=8 "
 CMD+="--learning_rate=2e-5 "
 CMD+="--warmup_proportion=0.05 "
-CMD+="--max_seq_length=512 "
+CMD+="--max_seq_length=${max_seq_len} "
 if [[ $cws_vocab_file != "" ]] ; then
   CMD+="--cws_vocab_file $cws_vocab_file "
 fi

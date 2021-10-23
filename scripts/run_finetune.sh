@@ -27,7 +27,7 @@ batch_size=${batch_size:-"32"}
 gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
-# max_seq_length=${max_seq_length:-128}
+max_seq_len=${max_seq_len:-128}
 fewshot=${fewshot:-"0"}
 two_level_embeddings=${two_level_embeddings:-"0"}
 test_model=${test_model:-""}
@@ -91,7 +91,7 @@ CMD+="--seed $seed "
 
 CMD+="--epochs $epochs "
 CMD+="--warmup_proportion $warmup_proportion "
-# CMD+="--max_seq_length $max_seq_length "
+CMD+="--max_seq_length $max_seq_len "
 CMD+="--learning_rate $learning_rate "
 CMD+="--gradient_accumulation_steps=$gradient_accumulation_steps "
 if [[ $fewshot == "1" ]] ; then

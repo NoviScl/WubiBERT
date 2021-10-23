@@ -17,6 +17,18 @@ VOCAB_FILES = {
     'random_index': 'tokenizers/random_index_22675.vocab',
 }
 
+VOCAB_FILES_500 = {
+    'pinyin': 'tokenizers/small_vocab/pinyin_zh_500.vocab',
+    'wubi': 'tokenizers/small_vocab/wubi_zh_500.vocab',
+    'byte': 'tokenizers/small_vocab/byte_500.vocab',
+    'random_index': 'tokenizers/small_vocab/random_index_500.vocab',
+}
+
+VOCAB_FILES_SHUFFLED_500 = {
+    'pinyin': 'tokenizers/small_vocab/pinyin_shuffled_500.vocab',
+    'wubi': 'tokenizers/small_vocab/wubi_shuffled_500.vocab',
+}
+
 # Returns a string template
 VOCAB_FILES_CWS = {
     'pinyin': 'cws_tokenizers/pinyin_cws_22675_{}.vocab',
