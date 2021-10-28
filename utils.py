@@ -21,6 +21,7 @@ import torch.distributed as dist
 
 from pathlib import Path
 from tokenization import ALL_TOKENIZERS
+import consts
 
 
 def get_rank():
@@ -185,3 +186,57 @@ def load_tokenizer(args):
     else:
         tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     return tokenizer
+
+
+def tokenizer_to_tokenizer_type(tokenizer) -> str:
+    for tok_type, t in ALL_TOKENIZERS.items():
+        if isinstance(tokenizer, t):
+            return tok_type
+    raise ValueError('Unrecognized tokenizer class')
+
+
+def name_of_tokenizer(tokenizer):
+    tok_type = tokenizer_to_tokenizer_type(tokenizer)
+    type_to_unique_name = {'RawZh': 'raw',
+                           'BertZh': 'bert',
+                           'Byte': 'byte',
+                           'RandomIndex': 'random_index'}
+    names = ['cangjie', 'stroke', 'pinyin', 'wubi', 'zhengma', 'zhuyin']
+    if tok_type in type_to_unique_name:
+        return type_to_unique_name[tok_type]
+    elif tok_type == 'CommonZh':
+        for name in names:
+            if name in tokenizer.vocab_file:
+                return name
+    elif tok_type == 'CommonZhNoIndex':
+        for name in names:
+            if name in tokenizer.vocab_file:
+                return name + '_no_index'
+    else:
+        raise ValueError('Unrecognized tokenizer type')
+    
+
+def normalize_tokenizer_name(name):
+    '''Remove tokenizer suffices'''
+    names = ['pinyin_concat_wubi',
+             'cangjie',
+             'pinyin',
+             'stroke',
+             'wubi',
+             'zhengma',
+             'zhuyin',
+             'raw',
+             'bert',
+             'byte',
+             'random_index']
+    for n in names:
+        if n in name:
+            return n
+    raise ValueError("Unrecognized tokenizer name: " + name)
+    
+    
+def auto_tokenizer(name):
+    tokenizer_type = consts.TOKENIZER_TYPES[name]
+    vocab_file = consts.ALL_VOCAB_FILES[name]
+    model_file = vocab_file.replace('.vocab', '.model')
+    return ALL_TOKENIZERS[tokenizer_type](vocab_file, model_file)

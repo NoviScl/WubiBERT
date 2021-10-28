@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 
 import consts
-from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+# from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
 from tokenization import (
     ALL_TOKENIZERS,
@@ -25,12 +25,12 @@ from tokenization import (
     BertZhTokenizer
 )
 from optimization import BertAdam, warmup_linear, get_optimizer
-from schedulers import LinearWarmUpScheduler
+# from schedulers import LinearWarmUpScheduler
 from utils import (json_load_by_line, json_save_by_line, mkdir, get_freer_gpu, 
                    get_device, output_dir_to_tokenizer_name, load_tokenizer)
-from run_pretraining import pretraining_dataset, WorkerInitObj
+# from run_pretraining import pretraining_dataset, WorkerInitObj
 
-from mrc.google_albert_pytorch_modeling import AlbertConfig, AlbertForMRC
+# from mrc.google_albert_pytorch_modeling import AlbertConfig, AlbertForMRC
 from mrc.preprocess.cmrc2018_evaluate import get_eval
 from mrc.tools import official_tokenization, utils
 from mrc.preprocess.cmrc2018_output import write_predictions

@@ -21,8 +21,6 @@ class Job:
             'seed': 10,
             'debug': False,
             'two_level_embeddings': False,
-            'use_shuffled': False,
-            'use_no_index': False,
             'use_cws': False,
             'use_500': False,
             'max_seq_len': 128,
@@ -52,29 +50,32 @@ class Job:
         self.script = self.get_script()
 
     def get_tokenizer_type(self):
-        if self.config['tokenizer'] == 'pinyin_concat_wubi':
+        tokenizer = self.config['tokenizer']
+        if tokenizer == 'pinyin_concat_wubi':
             return 'PinyinConcatWubi'
-        elif self.config['use_no_index']:
+        elif 'no_index' in tokenizer:
             return 'CommonZhNoIndex'
-        elif self.config['use_shuffled']:
+        elif 'shuffled' in tokenizer:
             return 'Shuffled'
-        elif self.config['use_cws']:
+        elif 'cws' in tokenizer:
             return 'CWS'
         else:
-            return consts.TOKENIZER_TYPES[self.config['tokenizer']]
+            return consts.TOKENIZER_TYPES[tokenizer]
 
     def get_vocab_file(self):
-        if self.config['use_no_index']:
-            return consts.VOCAB_FILES_NO_INDEX[self.config['tokenizer']]
-        if self.config['use_shuffled']:
-            if self.config['use_500']:
-                return consts.VOCAB_FILES_SHUFFLED_500[self.config['tokenizer']]
-            return consts.VOCAB_FILES_SHUFFLED[self.config['tokenizer']]
-        if self.config['use_500']:
-            return consts.VOCAB_FILES_500[self.config['tokenizer']]
-        if self.config['use_cws']:
-            return consts.VOCAB_FILES_CWS[self.config['tokenizer']].format('80')
-        return consts.VOCAB_FILES[self.config['tokenizer']]
+        return consts.ALL_VOCAB_FILES[self.config['tokenizer']]        
+        
+        # if self.config['use_no_index']:
+        #     return consts.VOCAB_FILES_NO_INDEX[self.config['tokenizer']]
+        # if self.config['use_shuffled']:
+        #     if self.config['use_500']:
+        #         return consts.VOCAB_FILES_SHUFFLED_500[self.config['tokenizer']]
+        #     return consts.VOCAB_FILES_SHUFFLED[self.config['tokenizer']]
+        # if self.config['use_500']:
+        #     return consts.VOCAB_FILES_500[self.config['tokenizer']]
+        # if self.config['use_cws']:
+        #     return consts.VOCAB_FILES_CWS[self.config['tokenizer']].format('80')
+        # return consts.VOCAB_FILES[self.config['tokenizer']]
 
     def is_classification_task(self) -> bool:
         C_TASKS = [
@@ -135,39 +136,41 @@ class Job:
             return os.path.join('configs', 'bert_config_vocab22675.json')
 
     def get_dir_ckpts(self):
-        if 'use_sp' in self.config and self.config['use_sp']:
-            return consts.DIR_CKPT_SP[self.config['tokenizer']]
-        elif 'use_long' in self.config and self.config['use_long']:
-            return consts.DIR_CKPTS_LONG[self.config['tokenizer']]
-        elif self.config['use_no_index']:
-            return consts.DIR_CKPTS_NO_INDEX[self.config['tokenizer']]
-        elif self.config['use_shuffled']:
-            if self.config['use_500']:
-                return consts.DIR_CKPTS_SHUFFLED_500[self.config['tokenizer']]
-            else:
-                return consts.DIR_CKPTS_SHUFFLED[self.config['tokenizer']]
-        elif self.config['use_500']:
-            return consts.DIR_CKPTS_500[self.config['tokenizer']]
-        elif self.config['use_cws']:
-            return consts.DIR_CKPTS_CWS[self.config['tokenizer']]
-        else:
-            return consts.DIR_CKPTS[self.config['tokenizer']]
+        return consts.ALL_DIR_CKPTS[self.config['tokenizer']]
+        # if 'use_sp' in self.config and self.config['use_sp']:
+        #     return consts.DIR_CKPT_SP[self.config['tokenizer']]
+        # elif 'use_long' in self.config and self.config['use_long']:
+        #     return consts.DIR_CKPTS_LONG[self.config['tokenizer']]
+        # elif self.config['use_no_index']:
+        #     return consts.DIR_CKPTS_NO_INDEX[self.config['tokenizer']]
+        # elif self.config['use_shuffled']:
+        #     if self.config['use_500']:
+        #         return consts.DIR_CKPTS_SHUFFLED_500[self.config['tokenizer']]
+        #     else:
+        #         return consts.DIR_CKPTS_SHUFFLED[self.config['tokenizer']]
+        # elif self.config['use_500']:
+        #     return consts.DIR_CKPTS_500[self.config['tokenizer']]
+        # elif self.config['use_cws']:
+        #     return consts.DIR_CKPTS_CWS[self.config['tokenizer']]
+        # else:
+        #     return consts.DIR_CKPTS[self.config['tokenizer']]
 
     def get_ckpt(self):
-        if self.config['use_sp']:
-            return 'ckpt_8601'
-        elif self.config['use_base']:
-            raise NotImplementedError
-        elif self.config['use_500']:
-            return consts.BSET_CKPTS_500[self.config['tokenizer']]
-        elif self.config['use_no_index']:
-            return consts.BEST_CKPTS_NO_INDEX[self.config['tokenizer']]
-        elif self.config['tokenizer'] == 'pinyin_concat_wubi':
-            raise NotImplementedError
-        elif self.config['use_cws']:
-            return consts.BEST_CKPTS_CWS[self.config['tokenizer']]
-        else:
-            return consts.BEST_CKPTS[self.config['tokenizer']]
+        return consts.ALL_BEST_CKPTS[self.config['tokenizer']]
+        # if self.config['use_sp']:
+        #     return 'ckpt_8601'
+        # elif self.config['use_base']:
+        #     raise NotImplementedError
+        # elif self.config['use_500']:
+        #     return consts.BSET_CKPTS_500[self.config['tokenizer']]
+        # elif self.config['use_no_index']:
+        #     return consts.BEST_CKPTS_NO_INDEX[self.config['tokenizer']]
+        # elif self.config['tokenizer'] == 'pinyin_concat_wubi':
+        #     raise NotImplementedError
+        # elif self.config['use_cws']:
+        #     return consts.BEST_CKPTS_CWS[self.config['tokenizer']]
+        # else:
+        #     return consts.BEST_CKPTS[self.config['tokenizer']]
 
     def get_epochs(self):
         if self.config['task'] == 'wsc':
@@ -193,22 +196,24 @@ class Job:
                                            self.config['noise_train'],
                                            self.config['noise_test'])
             
-            if 'use_base' in self.config and self.config['use_base']:
-                tokenizer += '_base'
-            if 'use_long' in self.config and self.config['use_long']:
-                tokenizer += '_long'
-            if self.config['use_shuffled']:
-                tokenizer += '_shuffled'
-            if self.config['use_no_index']:
-                tokenizer += '_no_index'
-            if self.config['use_cws']:
-                tokenizer += '_cws'
-            if self.config['use_500']:
-                tokenizer += '_500'
+            # if 'use_base' in self.config and self.config['use_base']:
+            #     tokenizer += '_base'
+            # if 'use_long' in self.config and self.config['use_long']:
+            #     tokenizer += '_long'
+            # if self.config['use_shuffled']:
+            #     tokenizer += '_shuffled'
+            # if self.config['use_no_index']:
+            #     tokenizer += '_no_index'
+            # if self.config['use_cws']:
+            #     tokenizer += '_cws'
+            # if self.config['use_500']:
+            #     tokenizer += '_500'
             if self.config['two_level_embeddings']:
                 tokenizer += '_twolevel'
             if 'max_seq_len' in self.config:
                 tokenizer += '_seqlen' + str(self.config['max_seq_len'])
+            if 'pack_seq' in self.config:
+                tokenizer += '_packseq'
 
             if task == 'drcd':
                 tokenizer += '_trad'  # DRCD always use traditional Chinese
@@ -267,8 +272,6 @@ class Job:
         '''
         ret = {
             # Hyperparameters
-            'max_seq_len': self.config['max_seq_len'],
-            'batch_size': self.config['batch_size'],
             'epochs': self.get_epochs(),
             'seed': self.config['seed'],
             'config_file': self.config_file,   # Hyperparameters of pre-training model
@@ -296,5 +299,9 @@ class Job:
             ret['test_model'] = self.test_model
         if 'use_cws' in self.config and self.config['use_cws']:
             ret['cws_vocab_file'] = self.cws_vocab_file
+        optional_keys = ['pack_seq', 'batch_size', 'max_seq_len']
+        for k in optional_keys:
+            if k in self.config:
+                ret[k] = self.config[k]
         return ret
 

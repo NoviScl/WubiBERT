@@ -30,6 +30,7 @@ warmup_proportion=${11:-"0.1"}
 max_seq_len=${max_seq_len:-128}
 fewshot=${fewshot:-"0"}
 two_level_embeddings=${two_level_embeddings:-"0"}
+pack_seq=${pack_seq:-""}
 test_model=${test_model:-""}
 cws_vocab_file=${cws_vocab_file:-""}
 
@@ -103,6 +104,9 @@ if [[ $test_model != "" ]] ; then
 fi
 if [[ $cws_vocab_file != "" ]] ; then
   CMD+="--cws_vocab_file $cws_vocab_file "
+fi
+if [[ $pack_seq != "" ]] ; then
+  CMD+="--pack_seq "
 fi
 
 LOGFILE=$out_dir/$seed/logfile

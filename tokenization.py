@@ -383,6 +383,7 @@ class CommonZhNoIndexTokenizer(object):
         elif 'zhuyin' in vocab_file:
             self.map_dict = load_dict(ch2zhuyin)
 
+        self.vocab_file = vocab_file
         self.vocab = load_vocab_spm(vocab_file)
         self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
         self.ids_to_tokens = collections.OrderedDict(
@@ -833,6 +834,7 @@ class CommonZhTokenizer(object):
         elif 'zhuyin' in vocab_file:
             self.map_dict = load_dict(ch2zhuyin)
 
+        self.vocab_file = vocab_file
         self.vocab = load_vocab_spm(vocab_file)
         self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
         self.ids_to_tokens = collections.OrderedDict(

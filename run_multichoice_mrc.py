@@ -62,9 +62,7 @@ from mrc.preprocess.CHID_preprocess import (
     convert_examples_to_features,
     write_features_json,
 )
-from mrc.pytorch_modeling import ALBertConfig, ALBertForMultipleChoice
 from mrc.pytorch_modeling import BertConfig, BertForMultipleChoice
-from run_pretraining import pretraining_dataset, WorkerInitObj
 
 import kara_storage
 import utils
@@ -176,14 +174,9 @@ def parse_args():
                         help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% "
                              "of training.")
     parser.add_argument("--num_train_epochs", type=int, required=True)
-    # parser.add_argument('--seed', type=int, default=42, help="random seed for initialization")
     parser.add_argument('--seed', type=int, required=True)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument("--do_lower_case", default=True,
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    # parser.add_argument('--fp16', default=False, action='store_true',
-    #                     help="Whether to use 16-bit float precision instead of 32-bit")
     return parser.parse_args()
 
 
@@ -450,11 +443,11 @@ def train(args):
     
     # NOTE: The following two vars might not hold if you change arguments
     # such as `max_num_choices`
-    num_train_steps = 86588
     num_features = 519550
-    logger.info("Num generated examples = {}".format(num_features))
-    logger.info("Batch size = {}".format(args.train_batch_size))
-    logger.info("Total num steps (sum all epochs) = {}".format(num_train_steps))
+    num_train_steps = 86588
+    steps_per_epoch = num_train_steps // args.num_train_epochs
+    # steps_per_epoch = 259775
+    # num_train_steps = steps_per_epoch * args.num_train_epochs
 
     eval_dataloader, eval_data = get_eval_dataloader_and_dataset(eval_features, args.predict_batch_size)
     all_example_ids, all_tags = get_example_ids_and_tags(eval_features)
@@ -462,7 +455,6 @@ def train(args):
     # Optimizer
     optimizer = get_optimizer(
         model,
-        # float16=args.fp16,
         float16=False,
         learning_rate=args.learning_rate,
         total_steps=num_train_steps,
@@ -482,13 +474,15 @@ def train(args):
     # Start training and evaluation
     logger.info('***** Training *****')
     logger.info('Number of epochs: ' + str(args.num_train_epochs))
-    logger.info('Batch size: ' + str(args.train_batch_size))
+    logger.info("# generated examples = {}".format(num_features))
+    logger.info("Batch size = {}".format(args.train_batch_size))
+    logger.info("Steps per epoch = {}".format(steps_per_epoch))
+    logger.info("********************")
     for ep in range(int(args.num_train_epochs)):
         num_step = 0
         total_train_loss = 0
         model.train()
         model.zero_grad()  # 等价于optimizer.zero_grad()
-        steps_per_epoch = num_train_steps // args.num_train_epochs
         with tqdm(total=int(steps_per_epoch), desc='Epoch %d' % (ep + 1), mininterval=10.0) as pbar:
             chid_dataset.reset()
             for step, batch in enumerate(train_dataloader):
@@ -506,23 +500,12 @@ def train(args):
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
 
-                # if args.fp16:
-                #     optimizer.backward(loss)
-                #     # modify learning rate with special warm up BERT uses
-                #     # if args.fp16 is False, BertAdam is used and handles this automatically
-                #     lr_this_step = args.learning_rate * warmup_linear(global_step / num_train_steps,
-                #                                                       args.warmup_proportion)
-                #     for param_group in optimizer.param_groups:
-                #         param_group['lr'] = lr_this_step
-                # else:
                 loss.backward()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
 
-
-                # train_loss_history.append(loss.item())
                 total_train_loss += loss.item()
                 num_step += 1
 

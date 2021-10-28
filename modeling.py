@@ -878,27 +878,56 @@ class BertModel(BertPreTrainedModel):
         self.output_all_encoded_layers = config.output_all_encoded_layers
 
     def forward(self, input_ids, token_type_ids, attention_mask,
-                token_ids=None, pos_left=None, pos_right=None, use_token_embeddings=None):
-        # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, to_seq_length]
-        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-        # this attention mask is more simple than the triangular masking of causal attention
-        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+                token_ids=None, pos_left=None, pos_right=None,
+                use_token_embeddings=None, packed_seq=None):
+        if packed_seq:
+            # Construct block-diagonal attention masks, example:
+            # Attention mask = [1, 1, 1, 2, 0], the result should be:
+            # [[1 1 1 0 0] 
+            #  [1 1 1 0 0]
+            #  [1 1 1 0 0]
+            #  [0 0 0 1 0]
+            #  [0 0 0 0 0]]
+            
+            # Also, the mask should be broadcast-able to (B, A, n, n),
+            # so mask's size should be  (B, 1, n, n)
+            padding = attention_mask == 0
+            binary_mask = [m.unsqueeze(0) == m.unsqueeze(0).T for m in attention_mask]  # (B, n, n)
+            binary_mask = torch.stack(binary_mask)
+            
+            # Remove block corresponding to padding tokens (mask == 0)
+            batch_size = attention_mask.size()[0]
+            for b in range(batch_size):
+                binary_mask[b][padding[b]] = False
+            
+            extended_attention_mask = binary_mask.unsqueeze(1)  # (B, 1, n, n)
+            extended_attention_mask = extended_attention_mask.to(dtype=self.embeddings.word_embeddings.weight.dtype) # fp16 compatibility
+            extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        else:
+            # We create a 3D attention mask from a 2D tensor mask.
+            # Sizes are [batch_size, 1, 1, to_seq_length]
+            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+            # this attention mask is more simple than the triangular masking of causal attention
+            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+            extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.embeddings.word_embeddings.weight.dtype) # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and -10000.0 for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+            extended_attention_mask = extended_attention_mask.to(dtype=self.embeddings.word_embeddings.weight.dtype) # fp16 compatibility
+            extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         embedding_output = self.embeddings(input_ids, token_type_ids, token_ids=token_ids,
                                            pos_left=pos_left, pos_right=pos_right,
                                            use_token_embeddings=use_token_embeddings)
         encoded_layers = self.encoder(embedding_output, extended_attention_mask)
         sequence_output = encoded_layers[-1]
+        
+        if packed_seq:
+            return sequence_output
+        
         pooled_output = self.pooler(sequence_output)
         if not self.output_all_encoded_layers:
             encoded_layers = encoded_layers[-1:]
@@ -1145,13 +1174,31 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None,
-                token_ids=None, pos_left=None, pos_right=None, use_token_embeddings=None):
-        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
-                                     token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                                     use_token_embeddings=use_token_embeddings
-        )
-        pooled_output = self.dropout(pooled_output)
-        return self.classifier(pooled_output)
+                token_ids=None, pos_left=None, pos_right=None,
+                use_token_embeddings=None, packed_seq: bool=False):
+        output = self.bert(input_ids, token_type_ids, attention_mask,
+                                     token_ids=token_ids, pos_left=pos_left,
+                                     pos_right=pos_right,
+                                     use_token_embeddings=use_token_embeddings,
+                                     packed_seq=packed_seq)
+        if packed_seq:
+            # output shape: (B, n, d)
+            # Do pooling and classification on all [CLS] tokens
+            seq_ids = attention_mask
+            batch_size, input_len = seq_ids.size()
+            logits = torch.zeros((batch_size, input_len, self.num_labels), 
+                                 device=input_ids.device)  # (B, N, C)
+            for b_i in range(batch_size):  # Each batch may have [CLS] at different positions
+                for i in range(input_len):
+                    if i == 0 or seq_ids[b_i][i] > seq_ids[b_i][i-1]:
+                        dropped = self.dropout(output[b_i][i])
+                        logits[b_i][i] = self.classifier(dropped)
+            return logits
+        else:
+            pooled_output = output[1]  # (B, d)
+            pooled_output = self.dropout(pooled_output)
+            logits = self.classifier(pooled_output)
+            return logits
 
 
 class BertForMultipleChoice(BertPreTrainedModel):
