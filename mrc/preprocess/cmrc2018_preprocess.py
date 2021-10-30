@@ -59,7 +59,7 @@ def _convert_index(index, pos, M=None, is_start=True):
             return index[front]
 
 
-def read_cmrc_examples(input_file, is_training, two_level_embeddings):
+def read_cmrc_examples(input_file, is_training):
     with open(input_file, 'r') as f:
         train_data = json.load(f)
     train_data = train_data['data']
@@ -70,20 +70,21 @@ def read_cmrc_examples(input_file, is_training, two_level_embeddings):
     for article in tqdm(train_data):
         for para in article['paragraphs']:
             context = para['context']
-            if two_level_embeddings:
-                context = context.replace('\u200b', '')
-                context = context.replace(u'\xa0', u'')
-                # Adjust answer position accordingly
-                for i, qas in enumerate(para['qas']):
-                    ans_text = qas['answers'][0]['text']
-                    ans_start = qas['answers'][0]['answer_start']
-                    if ans_text != context[ans_start:ans_start + len(ans_text)]:
-                        lo = None
-                        for offset in range(-3, 4):
-                            lo = ans_start + offset
-                            if context[lo:lo+len(ans_text)] == ans_text:
-                                break
-                        para['qas'][i]['answers'][0]['answer_start'] = lo
+            
+            # Replace special whitespace characters
+            context = context.replace('\u200b', '')
+            context = context.replace(u'\xa0', u'')
+            # Adjust answer position accordingly
+            for i, qas in enumerate(para['qas']):
+                ans_text = qas['answers'][0]['text']
+                ans_start = qas['answers'][0]['answer_start']
+                if ans_text != context[ans_start:ans_start + len(ans_text)]:
+                    lo = None
+                    for offset in range(-3, 4):
+                        lo = ans_start + offset
+                        if context[lo:lo+len(ans_text)] == ans_text:
+                            break
+                    para['qas'][i]['answers'][0]['answer_start'] = lo
 
             context_chs = _tokenize_chinese_chars(context)
             doc_tokens = []
@@ -105,38 +106,33 @@ def read_cmrc_examples(input_file, is_training, two_level_embeddings):
                 qid = qas['id']
                 ques_text = qas['question']
                 ans_text = qas['answers'][0]['text']
+                
+                count_i = 0
+                start_position = qas['answers'][0]['answer_start']
 
-                start_position_final = None
-                end_position_final = None
-                # if is_training:
-                if True:
-                    count_i = 0
-                    start_position = qas['answers'][0]['answer_start']
+                end_position = start_position + len(ans_text) - 1
+                repeat_limit = 3
+                while context[start_position:end_position + 1] != ans_text and count_i < repeat_limit:
+                    start_position -= 1
+                    end_position -= 1
+                    count_i += 1
 
-                    end_position = start_position + len(ans_text) - 1
-                    repeat_limit = 3
-                    while context[start_position:end_position + 1] != ans_text and count_i < repeat_limit:
-                        start_position -= 1
-                        end_position -= 1
-                        count_i += 1
+                while context[start_position] == " " or context[start_position] == "\t" or \
+                        context[start_position] == "\r" or context[start_position] == "\n":
+                    start_position += 1
 
-                    while context[start_position] == " " or context[start_position] == "\t" or \
-                            context[start_position] == "\r" or context[start_position] == "\n":
-                        start_position += 1
+                start_position_final = char_to_word_offset[start_position]
+                end_position_final = char_to_word_offset[end_position]
 
-                    start_position_final = char_to_word_offset[start_position]
-                    end_position_final = char_to_word_offset[end_position]
+                if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
+                    start_position_final += 1
 
-                    if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
-                        start_position_final += 1
+                actual_text = "".join(doc_tokens[start_position_final:(end_position_final + 1)])
+                cleaned_answer_text = "".join(tokenization.whitespace_tokenize(ans_text))
 
-                    actual_text = "".join(doc_tokens[start_position_final:(end_position_final + 1)])
-                    cleaned_answer_text = "".join(tokenization.whitespace_tokenize(ans_text))
-
-                    if actual_text != cleaned_answer_text:
-                        print(actual_text, 'V.S', cleaned_answer_text)
-                        mis_match += 1
-                        # ipdb.set_trace()
+                if actual_text != cleaned_answer_text:
+                    print(actual_text, 'V.S', cleaned_answer_text)
+                    mis_match += 1
 
                 examples.append({'doc_tokens': doc_tokens,
                                  'orig_answer_text': ans_text,

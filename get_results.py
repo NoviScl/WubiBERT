@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import consts
-from result_getter import print_scores, get_ckpts, get_accs
+from result_getter import print_scores, get_ckpts, get_accs, get_accs_all_seed
 
 
 def normalize_model_name(model):
@@ -64,38 +64,35 @@ def get_result_all_seqlen():
         result[task] = task_result
     print(json.dumps(result, indent=2))
 
+
+def get_all_accs():
+    tasks = ['cluener', 'cmrc']
+    models = ['pinyin', 'wubi', 'raw', 'bert', 'pinyin_no_index']
+    suffix = 'chartokens'
+    # suffix = 'twolevel'
+    # suffix = None
+    results = {}
+    for task in tasks:
+        results[task] = {}
+        for model in models:
+            ckpt = consts.ALL_BEST_CKPTS[model]
+            if suffix:
+                model += '_' + suffix
+            path = Path('logs', task, model, ckpt)
+            accs = get_accs_all_seed(path, verbose=False)
+            results[task][model] = accs
+            if len(accs) > 0: print(path, sum(accs) / len(accs))
+    print(json.dumps(results, indent=2))
+
+
 def get_all_res():
-    tasks = [
-        'tnews', 
-        'iflytek', 
-        # 'wsc',
-        # 'afqmc', 
-        # 'csl',  
-        # 'bq', 
-        # 'ocnli', 
-        # 'cmrc',
-        # 'drcd',
-        # 'cluener',
-        # 'c3', 
-        # 'thucnews', 
-        # 'chid',
-    ]
-    # tasks = ['cmrc', 'cluener']  # Two level embeddings
-    # tasks = ['tnews']
+    tasks = ['cmrc', 'cluener']  # Two level embeddings
     models = [
-        # 'cangjie', 
         'pinyin',
-        # 'stroke', 
-        # 'wubi', 
-        # 'zhengma', 
-        # 'zhuyin', 
-        # 'raw', 
+        'wubi', 
+        'raw', 
         'bert',
-        # 'pinyin_concat_wubi',
-        # 'byte',
-        # 'random_index',
         ]
-    # models = ['wubi']
 
     suffix = None
     # suffix = 'no_index'
@@ -103,6 +100,7 @@ def get_all_res():
     # suffix = 'cws'
     # suffix = '500'
     # suffix = 'shuffled_500'
+    suffix = 'chartokens'
     
     max_seq_len = 64
 
@@ -117,12 +115,16 @@ def get_all_res():
     # list_noise_test = [50, 100]
 
     # Don't change below
-    use_shuffled = suffix is not None and 'shuffled' in suffix
-    use_no_index = suffix is not None and 'no_index' in suffix
-    use_cws = suffix is not None and 'cws' in suffix
-    use_500 = suffix is not None and '500' in suffix
-    ckpts = get_ckpts(use_no_index, use_shuffled, use_cws, use_500)
-    ckpts['cangjie'] = 'ckpt_8804'
+    if suffix is not None:
+        # use_shuffled = suffix is not None and 'shuffled' in suffix
+        # use_no_index = suffix is not None and 'no_index' in suffix
+        use_cws = suffix is not None and 'cws' in suffix
+        use_500 = suffix is not None and '500' in suffix
+        two_level_embeddings = 'twolevel' in suffix
+        avg_char_tokens = 'chartokens' in suffix
+    ckpt = consts.ALL_BEST_CKPTS[model]
+    # ckpts = get_ckpts(use_no_index, use_shuffled, use_cws, use_500)
+    # ckpts['cangjie'] = 'ckpt_8804'
     
     if noise_type != None:
         noise_tasks = []
@@ -138,10 +140,6 @@ def get_all_res():
     for task in tasks:
         print(task)
         for model in models:
-            if task in ['cmrc', 'drcd', 'cluener'] and model != 'bert':
-                two_level_embeddings = True
-            else:
-                two_level_embeddings = False
             if model not in ckpts:
                 continue
             print(model)
@@ -150,10 +148,11 @@ def get_all_res():
             cs = [ckpts[model]]
             for ckpt in cs:
                 print(ckpt)
+                model += '_' + suffix
                 print_scores(task, model, ckpt=ckpt, 
                              two_level_embeddings=two_level_embeddings,
-                             use_shuffled=use_shuffled,
-                             use_no_index=use_no_index,
+                            #  use_shuffled=use_shuffled,
+                            #  use_no_index=use_no_index,
                              use_cws=use_cws,
                              use_500=use_500,
                              max_seq_len=max_seq_len,
@@ -162,8 +161,9 @@ def get_all_res():
 
 
 def main():
-    get_result_all_seqlen()
+    # get_result_all_seqlen()
     # get_all_res()
+    get_all_accs()
     # get_res_long('cmrc', ['raw'])
 
 

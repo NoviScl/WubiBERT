@@ -21,6 +21,7 @@ class Job:
             'seed': 10,
             'debug': False,
             'two_level_embeddings': False,
+            'avg_char_tokens': False,
             'use_cws': False,
             'use_500': False,
             'max_seq_len': 128,
@@ -63,19 +64,7 @@ class Job:
             return consts.TOKENIZER_TYPES[tokenizer]
 
     def get_vocab_file(self):
-        return consts.ALL_VOCAB_FILES[self.config['tokenizer']]        
-        
-        # if self.config['use_no_index']:
-        #     return consts.VOCAB_FILES_NO_INDEX[self.config['tokenizer']]
-        # if self.config['use_shuffled']:
-        #     if self.config['use_500']:
-        #         return consts.VOCAB_FILES_SHUFFLED_500[self.config['tokenizer']]
-        #     return consts.VOCAB_FILES_SHUFFLED[self.config['tokenizer']]
-        # if self.config['use_500']:
-        #     return consts.VOCAB_FILES_500[self.config['tokenizer']]
-        # if self.config['use_cws']:
-        #     return consts.VOCAB_FILES_CWS[self.config['tokenizer']].format('80')
-        # return consts.VOCAB_FILES[self.config['tokenizer']]
+        return consts.ALL_VOCAB_FILES[self.config['tokenizer']]
 
     def is_classification_task(self) -> bool:
         C_TASKS = [
@@ -137,40 +126,9 @@ class Job:
 
     def get_dir_ckpts(self):
         return consts.ALL_DIR_CKPTS[self.config['tokenizer']]
-        # if 'use_sp' in self.config and self.config['use_sp']:
-        #     return consts.DIR_CKPT_SP[self.config['tokenizer']]
-        # elif 'use_long' in self.config and self.config['use_long']:
-        #     return consts.DIR_CKPTS_LONG[self.config['tokenizer']]
-        # elif self.config['use_no_index']:
-        #     return consts.DIR_CKPTS_NO_INDEX[self.config['tokenizer']]
-        # elif self.config['use_shuffled']:
-        #     if self.config['use_500']:
-        #         return consts.DIR_CKPTS_SHUFFLED_500[self.config['tokenizer']]
-        #     else:
-        #         return consts.DIR_CKPTS_SHUFFLED[self.config['tokenizer']]
-        # elif self.config['use_500']:
-        #     return consts.DIR_CKPTS_500[self.config['tokenizer']]
-        # elif self.config['use_cws']:
-        #     return consts.DIR_CKPTS_CWS[self.config['tokenizer']]
-        # else:
-        #     return consts.DIR_CKPTS[self.config['tokenizer']]
 
     def get_ckpt(self):
         return consts.ALL_BEST_CKPTS[self.config['tokenizer']]
-        # if self.config['use_sp']:
-        #     return 'ckpt_8601'
-        # elif self.config['use_base']:
-        #     raise NotImplementedError
-        # elif self.config['use_500']:
-        #     return consts.BSET_CKPTS_500[self.config['tokenizer']]
-        # elif self.config['use_no_index']:
-        #     return consts.BEST_CKPTS_NO_INDEX[self.config['tokenizer']]
-        # elif self.config['tokenizer'] == 'pinyin_concat_wubi':
-        #     raise NotImplementedError
-        # elif self.config['use_cws']:
-        #     return consts.BEST_CKPTS_CWS[self.config['tokenizer']]
-        # else:
-        #     return consts.BEST_CKPTS[self.config['tokenizer']]
 
     def get_epochs(self):
         if self.config['task'] == 'wsc':
@@ -195,21 +153,10 @@ class Job:
                 task += '_{}_{}_{}'.format(self.config['noise_type'],
                                            self.config['noise_train'],
                                            self.config['noise_test'])
-            
-            # if 'use_base' in self.config and self.config['use_base']:
-            #     tokenizer += '_base'
-            # if 'use_long' in self.config and self.config['use_long']:
-            #     tokenizer += '_long'
-            # if self.config['use_shuffled']:
-            #     tokenizer += '_shuffled'
-            # if self.config['use_no_index']:
-            #     tokenizer += '_no_index'
-            # if self.config['use_cws']:
-            #     tokenizer += '_cws'
-            # if self.config['use_500']:
-            #     tokenizer += '_500'
             if self.config['two_level_embeddings']:
                 tokenizer += '_twolevel'
+            if self.config['avg_char_tokens']:
+                tokenizer += '_chartokens'
             if 'max_seq_len' in self.config:
                 tokenizer += '_seqlen' + str(self.config['max_seq_len'])
             if 'pack_seq' in self.config:
@@ -287,11 +234,9 @@ class Job:
             'train_dir': self.train_dir,
             'dev_dir': self.dev_dir,
             'test_dir': self.test_dir,
-            # 'fewshot': str(int(self.config['fewshot'])),
-            # 'convert_to_simplified': self.drcd_convert_to_simplified,
-            # 'batch_size': self.batch_size,
             'mode': self.mode,
             'two_level_embeddings': str(int(self.config['two_level_embeddings'])),
+            'avg_char_tokens': str(int(self.config['avg_char_tokens'])),
             'debug': str(int(self.config['debug'])),
         }
         

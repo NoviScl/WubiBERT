@@ -157,9 +157,8 @@ class BertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, position_ids=None, token_ids=None,
-                # left_indices=None, right_indices=None, 
-                # subchar_pos=None,
-                pos_left=None, pos_right=None, use_token_embeddings=None):
+                pos_left=None, pos_right=None, use_token_embeddings=False,
+                avg_char_tokens=False, char_ids=None):
         seq_length = input_ids.size(1)
         if position_ids is None:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
@@ -167,37 +166,63 @@ class BertEmbeddings(nn.Module):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
 
-        if not use_token_embeddings or token_ids is None:
-            words_embeddings = self.word_embeddings(input_ids)
-        else:
+
+        if avg_char_tokens:
+            subchar_embeddings = self.word_embeddings(input_ids)  # (B, L, D)
+            # char_ids = token_ids  # Reuse token_ids to save one parameter
+            B, L, D = subchar_embeddings.size()
+            
+            # Make `words_embeddings` by averaging `subchar_embeddings` of each
+            # char.
+            words_embeddings = torch.zeros_like(subchar_embeddings)
+            for b in range(B):
+                i = 0
+                # Query part just use subchar embeddings
+                while i < L and char_ids[b][i] == 0: 
+                    words_embeddings[b][i] = subchar_embeddings[b][i]
+                    i += 1
+                    
+                word_i = i
+                while i < L:
+                    # Compute average
+                    char_id = char_ids[b][i]
+                    lo = i
+                    while i < L and char_ids[b][i] == char_id:
+                        words_embeddings[b][word_i] += subchar_embeddings[b][i]
+                        i += 1
+                    words_embeddings[b][word_i] /= i - lo
+                    word_i += 1
+                
+                    # Skip padding
+                    while i < L and char_ids[b][i] == 0:
+                        i += 1
+        elif use_token_embeddings:
             subchar_embeddings = self.word_embeddings(input_ids)  # (B, L, D)
 
-            if use_token_embeddings:
-                token_embeddings = self.word_embeddings(token_ids)    # (B, L, D)
-                # Add mean of corresponding token embeddings to subchar embeddings.
-                device = input_ids.device
-                B = subchar_embeddings.shape[0]
-                L = subchar_embeddings.shape[1]
-                D = subchar_embeddings.shape[2]
-                for i in range(B):  # for each example
-                    for j in range(L):  # for each subchar
-                        left = pos_left[i][j]
-                        right = pos_right[i][j]
-                        if left < right:
-                            indices = torch.arange(left, right, device=device) 
-                            t = torch.index_select(token_embeddings[i], 0, indices)   # (right-left, D)
-                            t = torch.mean(t, 0)                                      # (D)
-                        elif left == right:
-                            # Know: left == right only if the subchar is a padding,
-                            # in which case, the embedding doesn't matter (its masked).
-                            t = torch.zeros(D, device=device)                      # (D)
-                        else:
-                            raise ValueError('pos_right should never be less than corresponding pos_left.')
-                        # Subchar embeddings is the mean of itself and mean of corresponding token embeddings
-                        subchar_embeddings[i][j] = (subchar_embeddings[i][j] + t) / 2
+            token_embeddings = self.word_embeddings(token_ids)    # (B, L, D)
+            # Add mean of corresponding token embeddings to subchar embeddings.
+            device = input_ids.device
+            B, L, D = subchar_embeddings.size()
+            for i in range(B):  # for each example
+                for j in range(L):  # for each subchar
+                    left = pos_left[i][j]
+                    right = pos_right[i][j]
+                    if left < right:
+                        indices = torch.arange(left, right, device=device) 
+                        t = torch.index_select(token_embeddings[i], 0, indices)   # (right-left, D)
+                        t = torch.mean(t, 0)                                      # (D)
+                    elif left == right:
+                        # Know: left == right only if the subchar is a padding,
+                        # in which case, the embedding doesn't matter (its masked).
+                        t = torch.zeros(D, device=device)                      # (D)
+                    else:
+                        raise ValueError('pos_right should never be less than corresponding pos_left.')
+                    # Subchar embeddings is the mean of itself and mean of corresponding token embeddings
+                    subchar_embeddings[i][j] = (subchar_embeddings[i][j] + t) / 2
 
             words_embeddings = subchar_embeddings
-
+        else:
+            words_embeddings = self.word_embeddings(input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -620,7 +645,8 @@ class BertModel(BertPreTrainedModel):
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, 
                 position_ids=None, head_mask=None, token_ids=None, 
-                pos_left=None, pos_right=None, use_token_embeddings=None):
+                pos_left=None, pos_right=None, use_token_embeddings=False,
+                avg_char_tokens=False, char_ids=None):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
@@ -656,8 +682,11 @@ class BertModel(BertPreTrainedModel):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-                                           token_ids=token_ids, pos_left=pos_left, pos_right=pos_right, use_token_embeddings=use_token_embeddings)
+        embedding_output = self.embeddings(
+            input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+            token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+            use_token_embeddings=use_token_embeddings,
+            avg_char_tokens=avg_char_tokens, char_ids=char_ids)
         encoder_outputs = self.encoder(embedding_output,
                                        extended_attention_mask,
                                        head_mask=head_mask)

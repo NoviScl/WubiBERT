@@ -12,12 +12,16 @@ def get_avg_time(task, model, ckpt, seeds):
         if not os.path.exists(filename):
             continue
         time_data = json.load(open(filename, 'r'))
-        list_time.append(float(time_data['elapsed']))
+        if 'elapsed' in time_data:
+            list_time.append(float(time_data['elapsed']))
     return list_time
     
-tasks = ['tnews', 'iflytek', 'ocnli', 'c3']
-models = ['bert', 'pinyin', 'pinyin_no_index']
-seq_lens = [8, 12, 16, 24, 32, 48, 64, 76, 80, 96, 128, 256, 384, 512]
+# tasks = ['tnews', 'iflytek', 'ocnli', 'c3']
+tasks = ['tnews', 'iflytek']
+# models = ['bert', 'pinyin', 'pinyin_no_index']
+models = ['bert', 'pinyin', 'wubi', 'raw', 'pinyin_no_index']
+# seq_lens = [8, 12, 16, 24, 32, 48, 64, 76, 80, 96, 128, 256, 384, 512]
+seq_lens = [512]
 
 seeds = list(range(10, 20))
 
@@ -29,7 +33,7 @@ for task in tasks:
         use_no_index = 'no_index' in model
         ckpt = get_ckpts(use_no_index=use_no_index)[model_normalized]
         for seq_len in seq_lens:
-            model_name = model + '_seqlen' + str(seq_len)
+            model_name = model + '_seqlen' + str(seq_len) + '_packseq'
             data = get_avg_time(task, model_name, ckpt, seeds)
             if data != []:
                 # print(seq_len)

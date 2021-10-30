@@ -12,9 +12,12 @@ from job import Job
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument('--two_level_embeddings')
+    p.add_argument('--char_pred', type=str, choices=['twolevel', 'chartokens', 'both'])
     p.add_argument('--test', action='store_true')
     p.add_argument('--max_seq_len', type=int)
+    p.add_argument('--task')
+    p.add_argument('--tokenizer')
+    p.add_argument('--seed', type=str, default='10', help='all means seed = 10~19')
     return p.parse_args()
 
 ########### Other settings ###########
@@ -26,11 +29,12 @@ DO_TRAIN = True
 DO_TEST = True
 
 TWO_LEVEL_EMBEDDINGS = False
+AVG_CHAR_TOKENS = True
 # USE_SHUFFLED = False
 # USE_NO_INDEX = False
 USE_CWS = False
 USE_500 = False
-PACK_SEQ = True
+PACK_SEQ = False
 
 # `run_glue.py` has max_seq_len = 128 by default
 # MAX_SEQ_LENS = [16, 24, 32, 48, 64, 80, 96, 128]  # iflytek
@@ -38,7 +42,7 @@ PACK_SEQ = True
 # MAX_SEQ_LENS = [32, 64, 128, 256, 384, 512]  # c3
 # MAX_SEQ_LENS = [32, 384]
 MAX_SEQ_LENS = [512]
-# MAX_SEQ_LENS = None
+MAX_SEQ_LENS = None
 PROD_SEQLEN_BS = 16384  # Correspond to batch_size = 128 when max_seq_len = 128
 EPOCHS = 6
 
@@ -61,11 +65,11 @@ NOISE_TEST = [
 ]
 
 SEEDS = [
-    # 10,
-    # 11, 
-    # 12, 
-    # 13, 
-    # 14,
+    10,
+    11, 
+    12, 
+    13, 
+    14,
     15, 
     16, 
     17, 
@@ -74,13 +78,13 @@ SEEDS = [
 ]
 TOKENIZERS = [
     # 'cangjie',
-    'pinyin',
+    # 'pinyin',
     # 'stroke',
     # 'wubi',
     # 'zhengma',
     # 'zhuyin',
     # 'raw',
-    # 'bert',
+    'bert',
     # 'pinyin_concat_wubi',
     # 'byte',
     # 'random_index',
@@ -91,13 +95,13 @@ TOKENIZERS = [
 
 
 TASKS = [
-    'tnews',
+    # 'tnews',
     # 'iflytek',
     # 'wsc',
     # 'afqmc',
     # 'csl',
     # 'ocnli',
-    # 'cmrc',
+    'cmrc',
     # 'drcd',
     # 'chid',
     # 'c3',
@@ -113,10 +117,10 @@ TASKS = [
 
 def sanity_assert():
     '''Sanity check on global variables'''
-    if any(task in ['cmrc', 'drcd', 'cluener'] for task in TASKS):
-        assert TWO_LEVEL_EMBEDDINGS
-    if any(task not in ['cmrc', 'drcd', 'cluener'] for task in TASKS):
-        assert not TWO_LEVEL_EMBEDDINGS
+    # if any(task in ['cmrc', 'drcd', 'cluener'] for task in TASKS):
+    #     assert TWO_LEVEL_EMBEDDINGS or AVG_CHAR_TOKENS
+    # if any(task not in ['cmrc', 'drcd', 'cluener'] for task in TASKS):
+    #     assert not TWO_LEVEL_EMBEDDINGS
     # if USE_SHUFFLED:
         # assert all(t in ['pinyin', 'wubi'] for t in TOKENIZERS)
     if USE_500:
@@ -166,7 +170,7 @@ def finetune(config: dict, tasks: [str], tokenizers: [str], seeds: [int],
     '''
     Submit finetuning job using given config
     '''
-    def _submit_each_seed(config, seeds):
+    def _submit_each_seed(config):
         for seed in seeds:
             config['seed'] = seed
             submit_job(config)
@@ -187,16 +191,16 @@ def finetune(config: dict, tasks: [str], tokenizers: [str], seeds: [int],
                         config.update({'noise_type': noise_type,
                                        'noise_train': noise_train,
                                        'noise_test': noise_test})
-                        _submit_each_seed(config, SEEDS)
+                        _submit_each_seed(config)
             elif max_seq_lens is not None:
                 # Loop values for max_seq_len
                 for max_seq_len in max_seq_lens:
                     config['max_seq_len'] = max_seq_len
                     config['batch_size'] = PROD_SEQLEN_BS // max_seq_len
-                    _submit_each_seed(config, SEEDS)
+                    _submit_each_seed(config)
             else:
                 # Ordinary
-                _submit_each_seed(config, SEEDS)
+                _submit_each_seed(config)
 
 
 def main(args):
@@ -205,6 +209,7 @@ def main(args):
     global_config = {
         'debug': DEBUG,
         'two_level_embeddings': TWO_LEVEL_EMBEDDINGS,
+        'avg_char_tokens': AVG_CHAR_TOKENS,
         # 'use_shuffled': USE_SHUFFLED,
         'use_cws': USE_CWS,
         'use_500': USE_500,
@@ -212,13 +217,34 @@ def main(args):
         'do_test': DO_TEST,
     }
     
-    # TODO: Add support for args
     # Change config according to args
     if args.test:
         global_config['do_train'] = False
         global_config['do_test'] = True
+    if args.task:
+        tasks = [args.task]
+    else:
+        tasks = TASKS
+    if args.tokenizer:
+        tokenizers = [args.tokenizer]
+    else:
+        tokenizers = TOKENIZERS
+    if args.seed:
+        if args.seed == 'all':
+            seeds = list(range(10, 20))
+        else:
+            seeds = [int(args.seed)]
+    else:
+        seeds = SEEDS
+    if args.char_pred:
+        if args.char_pred == 'both':
+            global_config['two_level_embeddings'] = True
+            global_config['avg_char_tokens'] = True
+        else:
+            global_config['two_level_embeddings'] = args.char_pred == 'twolevel'
+            global_config['avg_char_tokens'] = args.char_pred == 'chartokens'
     
-    finetune(global_config, TASKS, TOKENIZERS, SEEDS, noise_type=NOISE_TYPE,
+    finetune(global_config, tasks, tokenizers, seeds, noise_type=NOISE_TYPE,
              noise_train=NOISE_TRAIN, noise_test=NOISE_TEST,
              pack_seq=PACK_SEQ, max_seq_lens=MAX_SEQ_LENS)
 

@@ -107,7 +107,7 @@ def collate_fn(batch):
             all_pos_right)
 
 
-def collate_fn_with_char_labels(batch):
+def collate_fn_chartokens(batch):
     """
     batch should be a list of (sequence, target, length) tuples...
     Returns a padded tensor of sequences sorted from longest to shortest,
@@ -116,31 +116,26 @@ def collate_fn_with_char_labels(batch):
      all_attention_mask, 
      all_token_type_ids, 
      all_lens, 
-     all_labels, 
-     all_char_labels, 
-     all_left_index,
-     all_right_index) = map(torch.stack, zip(*batch))
+     all_char_labels,
+     all_char_ids) = map(torch.stack, zip(*batch))
 
     max_len = max(all_lens).item()
     all_input_ids = all_input_ids[:, :max_len]
     all_attention_mask = all_attention_mask[:, :max_len]
     all_token_type_ids = all_token_type_ids[:, :max_len]
-    all_labels = all_labels[:, :max_len]
     all_char_labels = all_char_labels[:, :max_len]
-    all_left_index = all_left_index[:, :max_len]
-    all_right_index = all_right_index[:, :max_len]
+    all_char_ids = all_char_ids[:, :max_len]
 
     return (all_input_ids, 
             all_attention_mask, 
             all_token_type_ids, 
-            all_labels, 
-            all_lens, 
             all_char_labels,
-            all_left_index,
-            all_right_index)
+            all_lens, 
+            all_char_ids,
+            )
 
 
-def collate_fn_wtih_token_ids(batch):
+def collate_fn_twolevel(batch):
     """
     batch should be a list of (sequence, target, length) tuples...
     Returns a padded tensor of sequences sorted from longest to shortest,
@@ -173,21 +168,26 @@ def collate_fn_wtih_token_ids(batch):
             all_pos_right)
 
 
-def get_collate_fn(two_level_embeddings: bool):
+def get_collate_fn(two_level_embeddings: bool, avg_char_tokens: bool):
     if two_level_embeddings:
-        return collate_fn_wtih_token_ids
+        return collate_fn_twolevel
+    elif avg_char_tokens:
+        return collate_fn_chartokens
     else:
-        return collate_fn_with_char_labels
+        raise NotImplementedError
 
 
 def convert_examples_to_features(*args, **kwargs):
     if kwargs['two_level_embeddings']:
-        return convert_examples_to_features_token_ids(*args, **kwargs)
+        return convert_examples_to_features_twolevel(*args, **kwargs)
+    if kwargs['avg_char_tokens']:
+        return convert_examples_to_features_chartokens(*args, **kwargs)
     else:
-        return convert_examples_to_features_char_labels(*args, **kwargs)
+        raise NotImplementedError
+        # return convert_examples_to_features_char_labels(*args, **kwargs)
 
 
-def convert_examples_to_features_token_ids(
+def convert_examples_to_features_twolevel(
     examples,
     label_list,
     max_seq_length,
@@ -201,7 +201,7 @@ def convert_examples_to_features_token_ids(
     pad_token_segment_id=0,
     sequence_a_segment_id=0,
     mask_padding_with_zero=True,
-    two_level_embeddings=True,
+    **kwargs,
     ):
     """ Loads a data file into a list of `InputBatch`s
         `cls_token_at_end` define the location of the CLS token:
@@ -212,8 +212,8 @@ def convert_examples_to_features_token_ids(
     label_map = {label: i for i, label in enumerate(label_list)}
     features = []
     for (ex_index, example) in enumerate(examples):
-        if ex_index % 10000 == 0:
-            logger.info("Writing example %d of %d", ex_index, len(examples))
+        # if ex_index % 10000 == 0:
+        #     logger.info("Writing example %d of %d", ex_index, len(examples))
         # tokens = [tokenizer.tokenize(w) for w in example.text_a]
         # 拆字，并求每个 subchar 的 label
         subchars = []
@@ -335,30 +335,142 @@ def convert_examples_to_features_token_ids(
         assert len(token_ids) == max_seq_length
         assert len(pos_left) == len(pos_right) == max_seq_length
 
-        if ex_index < 2:
-            logger.info("*** Example ***")
-            logger.info("guid: %s", example.guid)
-            logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
-            logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
-            logger.info("label_ids: %s", " ".join([str(x) for x in label_ids]))
-            logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
-            logger.info(f"token_ids: {' '.join([str(x) for x in token_ids])}")
-            logger.info(f'pos_left: {pos_left}')
-            logger.info(f'pos_right: {pos_right}')
+        # if ex_index == 0:
+        #     logger.info("*** Example ***")
+        #     logger.info("guid: %s", example.guid)
+        #     logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
+        #     logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
+        #     logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
+        #     logger.info("label_ids: %s", " ".join([str(x) for x in label_ids]))
+        #     logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
+        #     logger.info(f"token_ids: {' '.join([str(x) for x in token_ids])}")
+        #     logger.info(f'pos_left: {pos_left}')
+        #     logger.info(f'pos_right: {pos_right}')
 
-        features.append(
-            InputFeatures(
-                input_ids=input_ids, 
-                input_mask=input_mask, 
-                input_len=input_len,
-                segment_ids=segment_ids, 
-                label_ids=label_ids, 
-                token_ids=token_ids, 
-                pos_left=pos_left, 
-                pos_right=pos_right,
-            )
-        )
+        feature = {'input_ids': input_ids, 
+                   'input_mask': input_mask, 
+                   'input_len': input_len,
+                   'segment_ids': segment_ids, 
+                   'label_ids': label_ids, 
+                   'token_ids': token_ids, 
+                   'pos_left': pos_left, 
+                   'pos_right': pos_right}
+        features.append(feature)
+    return features
+
+
+def convert_examples_to_features_chartokens(
+    examples,
+    label_list,
+    max_seq_length,
+    tokenizer,
+    cls_token_at_end=False,
+    cls_token="[CLS]",
+    cls_token_segment_id=1,
+    sep_token="[SEP]",
+    pad_on_left=False,
+    pad_token=0,
+    pad_token_segment_id=0,
+    sequence_a_segment_id=0,
+    mask_padding_with_zero=True,
+    **kwargs,
+    ):
+    """ Loads a data file into a list of `InputBatch`s
+        `cls_token_at_end` define the location of the CLS token:
+            - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
+            - True (XLNet/GPT pattern): A + [SEP] + B + [SEP] + [CLS]
+        `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
+    """
+    label_map = {label: i for i, label in enumerate(label_list)}
+    features = []
+    for (ex_index, example) in enumerate(examples):
+        # Tokenize each char individually, and save a char ID feature
+        tokens = []  # Subchar tokens
+        char_ids = []
+        for i, c in enumerate(example.text_a):  # Loop chars
+            subchar_tokens = tokenizer.tokenize(c)
+            char_ids += [i + 1] * len(subchar_tokens)
+            tokens += subchar_tokens
+        
+        char_label_ids = [label_map[x] for x in example.labels]
+
+        # Account for [CLS] and [SEP] with "- 2".
+        trim_len = max_seq_length - 2
+        tokens = tokens[:trim_len]
+        char_ids = char_ids[:trim_len]
+        char_label_ids = char_label_ids[:trim_len]
+
+        # Append [SEP]
+        tokens += [sep_token]
+        char_ids += [char_ids[-1] + 1]
+        char_label_ids += [label_map['O']]
+        segment_ids = [sequence_a_segment_id] * len(char_label_ids)
+
+        # Add [CLS]
+        if cls_token_at_end:
+            raise NotImplementedError
+            # subchars += [cls_token]
+            tokens += [cls_token]
+            # subchar_label_ids += [label_map['O']]
+            # subchar_pos += [len(tokens)]
+            char_label_ids += [label_map['O']]
+            segment_ids += [cls_token_segment_id]
+            char_ids += [0]
+        else:
+            tokens = [cls_token] + tokens
+            # label_ids = [label_map['O']] + label_ids
+            # token_pos = [0] + [x + 1 for x in token_pos]
+            char_label_ids = [label_map['O']] + char_label_ids
+            segment_ids = [cls_token_segment_id] + segment_ids
+            char_ids = [0] + char_ids
+
+        input_ids = tokenizer.convert_tokens_to_ids(tokens)  # Actually: Subchar ids
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        input_mask = [1 if mask_padding_with_zero else 0] * len(char_label_ids)
+        input_len = len(char_label_ids)
+        # Zero-pad up to the sequence length.
+        padding_length = max_seq_length - len(input_ids)
+        char_padding_length = max_seq_length - len(char_label_ids)
+
+        if pad_on_left:
+            raise NotImplementedError
+            # input_ids = ([pad_token] * padding_length) + input_ids
+            # input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
+            # segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
+            # char_label_ids = ([pad_token] * char_padding_length) + char_label_ids
+        else:
+            input_ids += [pad_token] * padding_length
+            char_ids += [0] * padding_length
+            input_mask += [0 if mask_padding_with_zero else 1] * char_padding_length
+            segment_ids += [pad_token_segment_id] * char_padding_length
+            char_label_ids += [0] * char_padding_length
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+        assert len(char_ids) == max_seq_length
+        assert len(char_label_ids) == max_seq_length
+
+        # if ex_index == 0:
+        #     logger.info("*** Example 0 ***")
+        #     logger.info("guid: %s", example.guid)
+        #     logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
+        #     logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
+        #     logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
+        #     # logger.info("label_ids: %s", " ".join([str(x) for x in label_ids]))
+        #     logger.info("char_label_ids: %s", " ".join([str(x) for x in char_label_ids]))
+        #     logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
+        #     logger.info("char ids: %s", " ".join([str(x) for x in char_ids]))            
+
+        feature = {'input_ids': input_ids, 
+                   'input_mask': input_mask, 
+                   'input_len': input_len,
+                   'segment_ids': segment_ids, 
+                   'label_ids': char_label_ids,
+                   'char_ids': char_ids}
+        features.append(feature)
     return features
 
 
@@ -376,7 +488,6 @@ def convert_examples_to_features_char_labels(
     pad_token_segment_id=0,
     sequence_a_segment_id=0,
     mask_padding_with_zero=True,
-    two_level_embeddings=False,  # Will be ignored
     ):
     """ Loads a data file into a list of `InputBatch`s
         `cls_token_at_end` define the location of the CLS token:
@@ -387,8 +498,8 @@ def convert_examples_to_features_char_labels(
     label_map = {label: i for i, label in enumerate(label_list)}
     features = []
     for (ex_index, example) in enumerate(examples):
-        if ex_index % 10000 == 0:
-            logger.info("Writing example %d of %d", ex_index, len(examples))
+        # if ex_index % 10000 == 0:
+        #     logger.info("Writing example %d of %d", ex_index, len(examples))
         # Prediction on tokens, then map to chars predictions.
         tokens = tokenizer.tokenize(example.text_a)
         token_pos = get_token_pos(tokens, tokenizer, split_tokens)
@@ -396,14 +507,6 @@ def convert_examples_to_features_char_labels(
         token_labels = get_labels_of_tokens(example.labels, tokens, token_pos)
         label_ids = [label_map[x] for x in token_labels]
         char_label_ids = [label_map[x] for x in example.labels]
-
-
-        # print(example.text_a)
-        # print(tokens)
-        # print(token_pos)
-        # print(token_labels)
-        # print(example.labels)
-        # exit()
 
         # Account for [CLS] and [SEP] with "- 2".
         special_tokens_count = 2
@@ -484,14 +587,6 @@ def convert_examples_to_features_char_labels(
             char_label_ids += [0] * char_padding_length
             pos_left += [-1] * padding_length
             pos_right += [-1] * padding_length
-
-        # print(example.text_a)
-        # print(example.labels)
-        # print(subchars)
-        # print(input_ids)
-        # print(labels)
-        # print(label_ids)
-        # exit()
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length

@@ -11,6 +11,7 @@ tokenizer_type=${tokenizer_type:-""}
 
 convert_to_simplified=${convert_to_simplified:-""}
 two_level_embeddings=${two_level_embeddings:-""}
+avg_char_tokens=${avg_char_tokens:-""}
 debug=${debug:-0}
 
 data_dir=${data_dir:-""}
@@ -42,6 +43,10 @@ fi
 
 if [ $two_level_embeddings -eq 1 ] ; then
   CMD+="--two_level_embeddings "
+fi
+
+if [ $avg_char_tokens -eq 1 ] ; then
+  CMD+="--avg_char_tokens "
 fi
 
 if [ $debug -eq 1 ] ; then

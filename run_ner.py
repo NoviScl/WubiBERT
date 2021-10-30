@@ -43,91 +43,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TWO_LEVEL_EMBEDDINGS = True
-USE_TOKEN_EMBEDDINGS = True
+# TWO_LEVEL_EMBEDDINGS = False
+# USE_TOKEN_EMBEDDINGS = True
+AVG_CHAR_TOKENS = True
 CLS_TOKEN = '[CLS]'
 SEP_TOKEN = '[SEP]'
 PAD_TOKEN = '[PAD]'
 
-collate_fn = get_collate_fn(TWO_LEVEL_EMBEDDINGS)
+
+def collate_fn_from_args(args):
+    return get_collate_fn(args.two_level_embeddings, args.avg_char_tokens)
 
 
-def get_char_preds(model, dataloader, device, id2label):
-    char_preds = []
-    token_preds = []
-    for step, batch in enumerate(tqdm(dataloader, mininterval=8.0, desc='Evaluating')):
-        model.eval()
-        batch = tuple(t.to(device) for t in batch)
-        with torch.no_grad():
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask": batch[1],
-                'token_type_ids': batch[2],
-                "labels": batch[3],
-                'input_lens': batch[4],
-            }
-            outputs = model(**inputs)
-            _, logits = outputs[:2]
-            tags = model.crf.decode(logits, inputs['attention_mask'])
-        # NOTE: labels of tokens might not match char labels from dataset
-        labels = batch[5].cpu().numpy().tolist()
-        tags = tags.squeeze(0).cpu().numpy().tolist()
-        token_preds += tags
-
-        # Convert to char labels, for exact comparison with labels in dataset
-        left_index = batch[6].cpu().numpy().tolist()
-        right_index = batch[7].cpu().numpy().tolist()
-        old_tags = tags
-        tags = [get_char_labels(tags[i], left_index[i], right_index[i], id2label) for i in range(len(tags))]
-        
-        # for i in range(len(tags)):
-        #     if len(tags[i]) != len(labels[i]):
-        #         print(tags[i])
-        #         print(labels[i])
-        #         exit()
-
-        char_preds += tags
-    return char_preds, token_preds
-
-
-def get_examples(data_type, data_dir):
-    processor = processors['cluener']()
-    if data_type == 'train':
-        examples = processor.get_train_examples(data_dir)
-    elif data_type == 'dev':
-        examples = processor.get_dev_examples(data_dir)
-    else:
-        examples = processor.get_test_examples(data_dir)
-    return examples
- 
-
-def get_tokens(tokenizer, data_dir, data_type, max_seq_length):
-    examples = get_examples(data_type, data_dir)
-    all_tokens = []
-    for ex in examples:
-        tokens = tokenizer.tokenize(ex.text_a)
-        if len(tokens) > max_seq_length - 2:
-            tokens = tokens[: (max_seq_length - 2)]
-        all_tokens.append(['[CLS]'] + tokens + ['[SEP]'])
-    return all_tokens
-
-
-def get_truth(dataloader):
-    char_labels = []
-    for step, batch in enumerate(dataloader):
-        out_label_ids = batch[5].cpu().numpy().tolist()  # Char labels
-        char_labels += out_label_ids
-    return char_labels
-
-
-def evaluate(args, model, dataset, id2label, device, dump_preds=False, two_level_embeddings=True):
+def evaluate(args, model, dataset, id2label, device):
     metric = SeqEntityScore(id2label, markup=args.markup)
     sampler = SequentialSampler(dataset)
-    dataloader = DataLoader(
-        dataset, 
-        sampler=sampler, 
-        batch_size=args.eval_batch_size, 
-        collate_fn=collate_fn)
+    dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.eval_batch_size, 
+                            collate_fn=collate_fn_from_args(args))
 
     # Evaluation
     total_eval_loss = 0.0
@@ -144,11 +76,14 @@ def evaluate(args, model, dataset, id2label, device, dump_preds=False, two_level
                 "labels": batch[3],
                 'input_lens': batch[4],
             }
-            if two_level_embeddings:
+            if args.avg_char_tokens:
+                inputs['char_ids'] = batch[5]
+                inputs['avg_char_tokens'] = True
+            elif args.two_level_embeddings:
                 inputs['token_ids'] = batch[5]
                 inputs['pos_right'] = batch[7]
                 inputs['pos_left'] = batch[6]
-                inputs['use_token_embeddings'] = USE_TOKEN_EMBEDDINGS
+                inputs['use_token_embeddings'] = True
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
             tags = model.crf.decode(logits, inputs['attention_mask'])
@@ -159,6 +94,8 @@ def evaluate(args, model, dataset, id2label, device, dump_preds=False, two_level
         out_label_ids = inputs['labels'].cpu().numpy().tolist()  # Token labels
         input_lens = inputs['input_lens'].cpu().numpy().tolist()
         tags = tags.squeeze(0).cpu().numpy().tolist()
+        
+        json.dump(out_label_ids, open('labels.json', 'w'))
 
         for i, label in enumerate(out_label_ids):
             temp_1 = []
@@ -181,117 +118,38 @@ def evaluate(args, model, dataset, id2label, device, dump_preds=False, two_level
     logger.info("***** Eval results *****")
     info = "-".join([f' {key}: {value:.4f} ' for key, value in results.items()])
     logger.info(info)
-    logger.info("***** Entity results *****")
-    for key in sorted(entity_info.keys()):
-        logger.info("******* %s results ********" % key)
-        info = "-".join([f' {key}: {value:.4f} ' for key, value in entity_info[key].items()])
-        logger.info(info)
+    # logger.info("***** Entity results *****")
+    # for key in sorted(entity_info.keys()):
+    #     logger.info("******* %s results ********" % key)
+    #     info = "-".join([f' {key}: {value:.4f} ' for key, value in entity_info[key].items()])
+    #     logger.info(info)
 
     return results
 
 
-def predict(args, model, tokenizer, prefix=""):
-    pred_output_dir = args.output_dir
-    if not os.path.exists(pred_output_dir) and args.local_rank in [-1, 0]:
-        os.makedirs(pred_output_dir)
-    test_dataset = get_dataset(args, args.task_name, tokenizer, data_type='test', two_level_embeddings=TWO_LEVEL_EMBEDDINGS)
-    # Note that DistributedSampler samples randomly
-    test_sampler = SequentialSampler(test_dataset) if args.local_rank == -1 else DistributedSampler(test_dataset)
-    test_dataloader = DataLoader(test_dataset, sampler=test_sampler, batch_size=1, collate_fn=collate_fn)
-    # Eval!
-    logger.info("***** Running prediction %s *****", prefix)
-    logger.info("  Num examples = %d", len(test_dataset))
-    logger.info("  Batch size = %d", 1)
-    results = []
-    output_predict_file = os.path.join(pred_output_dir, prefix, "test_prediction.json")
-    pbar = ProgressBar(n_total=len(test_dataloader), desc="Predicting")
-
-    if isinstance(model, nn.DataParallel):
-        model = model.module
-    for step, batch in enumerate(test_dataloader):
-        model.eval()
-        batch = tuple(t.to(args.device) for t in batch)
-        with torch.no_grad():
-            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": None, 'input_lens': batch[4]}
-            if args.model_type != "distilbert":
-                # XLM and RoBERTa don"t use segment_ids
-                inputs["token_type_ids"] = (batch[2] if args.model_type in ["bert", "xlnet"] else None)
-            outputs = model(**inputs)
-            logits = outputs[0]
-            tags = model.crf.decode(logits, inputs['attention_mask'])
-            tags  = tags.squeeze(0).cpu().numpy().tolist()
-        preds = tags[0][1:-1]  # [CLS]XXXX[SEP]
-        label_entities = get_entities(preds, args.id2label, args.markup)
-        json_d = {}
-        json_d['id'] = step
-        json_d['tag_seq'] = " ".join([args.id2label[x] for x in preds])
-        json_d['entities'] = label_entities
-        results.append(json_d)
-        pbar(step)
-    logger.info("\n")
-    with open(output_predict_file, "w") as writer:
-        for record in results:
-            writer.write(json.dumps(record) + '\n')
-    if args.task_name == 'cluener':
-        output_submit_file = os.path.join(pred_output_dir, prefix, "test_submit.json")
-        test_text = []
-        with open(os.path.join(args.data_dir,"test.json"), 'r') as fr:
-            for line in fr:
-                test_text.append(json.loads(line))
-        test_submit = []
-        for x, y in zip(test_text, results):
-            json_d = {}
-            json_d['id'] = x['id']
-            json_d['label'] = {}
-            entities = y['entities']
-            words = list(x['text'])
-            if len(entities) != 0:
-                for subject in entities:
-                    tag = subject[0]
-                    start = subject[1]
-                    end = subject[2]
-                    word = "".join(words[start:end + 1])
-                    if tag in json_d['label']:
-                        if word in json_d['label'][tag]:
-                            json_d['label'][tag][word].append([start, end])
-                        else:
-                            json_d['label'][tag][word] = [[start, end]]
-                    else:
-                        json_d['label'][tag] = {}
-                        json_d['label'][tag][word] = [[start, end]]
-            test_submit.append(json_d)
-        json_to_text(output_submit_file,test_submit)
-
-
-def get_dataset(
-    task,
-    data_dir,
-    tokenizer,
-    tokenizer_name, 
-    data_type,
-    max_seq_len,
-    two_level_embeddings=True,
-    ):
+def get_dataset(task, data_dir, tokenizer, tokenizer_name, data_type, max_seq_len,
+                two_level_embeddings, avg_char_tokens):
     '''
     Generate dataset from data file.
     This will cache features using torch.save in data_dir.
 
     two_level_embeddings: Whether features should contain both split char tokens and ordinary tokens.
     '''
-    # if args.local_rank not in [-1, 0] and not evaluate:
-    #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
     processor = processors[task]()
-    use_cache = False
+    use_cache = False  # TODO: Set as True on deployment
     
     # Load data features from cache or dataset file
-    cached_features_file = os.path.join(data_dir, 'cache_{}_{}_{}'.format(
-        data_type,
-        tokenizer_name,
-        str(max_seq_len)))
+    cached_features_file = 'cache_{}_{}_{}'.format(data_type, tokenizer_name,
+                                                   str(max_seq_len))
+    if two_level_embeddings:
+        cached_features_file += '_twolevel'
+    elif avg_char_tokens:
+        cached_features_file += '_chartokens'
+    cached_features_file = os.path.join(data_dir, cached_features_file + '.json')
 
     if use_cache and os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features = json.load(open(cached_features_file, 'r'))
     else:
         logger.info("Creating features from dataset file at %s", data_dir)
         label_list = processor.get_labels()
@@ -315,33 +173,31 @@ def get_dataset(
             pad_token=tokenizer.convert_tokens_to_ids([PAD_TOKEN])[0],
             pad_token_segment_id=0,
             two_level_embeddings=two_level_embeddings,
+            avg_char_tokens=avg_char_tokens,
         )
-        # if args.local_rank in [-1, 0]:
         logger.info("Saving features into cached file %s", cached_features_file)
-        torch.save(features, cached_features_file)
-    # if args.local_rank == 0 and not evaluate:
-    #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        json.dump(features, open(cached_features_file, 'w'))
     # Convert to Tensors and build dataset
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-    all_lens = torch.tensor([f.input_len for f in features], dtype=torch.long)
+    all_input_ids = torch.tensor([f['input_ids'] for f in features], dtype=torch.long)
+    all_input_mask = torch.tensor([f['input_mask'] for f in features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f['segment_ids'] for f in features], dtype=torch.long)
+    all_label_ids = torch.tensor([f['label_ids'] for f in features], dtype=torch.long)
+    all_lens = torch.tensor([f['input_len'] for f in features], dtype=torch.long)
 
-    all_pos_left = torch.tensor([f.pos_left for f in features], dtype=torch.long)
-    all_pos_right = torch.tensor([f.pos_right for f in features], dtype=torch.long)
-    # all_subchar_pos = torch.tensor([f.subchar_pos for f in features], dtype=torch.long)
     if two_level_embeddings:
-        all_token_ids = torch.tensor([f.token_ids for f in features], dtype=torch.long)
+        all_pos_left = torch.tensor([f['pos_left'] for f in features], dtype=torch.long)
+        all_pos_right = torch.tensor([f['pos_right'] for f in features], dtype=torch.long)
+        all_token_ids = torch.tensor([f['token_ids'] for f in features], dtype=torch.long)
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, 
                                 all_lens, all_label_ids, all_token_ids,
                                 all_pos_left, all_pos_right)
+    elif avg_char_tokens:
+        all_char_ids = [f['char_ids'] for f in features]
+        all_char_ids = torch.tensor(all_char_ids, dtype=torch.long)
+        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
+                                all_lens, all_label_ids, all_char_ids)
     else:
-        all_char_label_ids = torch.tensor([f.char_label_ids for f in features], dtype=torch.long)
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, 
-                                all_lens, all_label_ids, all_char_label_ids, 
-                                all_pos_left, all_pos_right)
-
+        raise NotImplementedError
     return dataset
 
 
@@ -429,12 +285,13 @@ def train(args):
         tokenizer_name=tokenizer_name,
         data_type='train',
         max_seq_len=args.train_max_seq_length,
-        two_level_embeddings=TWO_LEVEL_EMBEDDINGS)
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, 
                                   sampler=train_sampler, 
                                   batch_size=args.train_batch_size,
-                                  collate_fn=collate_fn)
+                                  collate_fn=collate_fn_from_args(args))
 
     dev_dataset = get_dataset(
         # args, 
@@ -444,7 +301,8 @@ def train(args):
         tokenizer_name=tokenizer_name,
         data_type='dev',
         max_seq_len=args.eval_max_seq_length,
-        two_level_embeddings=TWO_LEVEL_EMBEDDINGS)
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
 
     # Optimizer
     n_train_steps = len(train_dataloader) * args.epochs
@@ -499,13 +357,14 @@ def train(args):
                 "labels": batch[3],
                 'input_lens': batch[4],
             }
-            if TWO_LEVEL_EMBEDDINGS:
+            if args.avg_char_tokens:
+                inputs['char_ids'] = batch[5]
+                inputs['avg_char_tokens'] = True
+            if args.two_level_embeddings:
                 inputs['token_ids'] = batch[5]
                 inputs['pos_left'] = batch[6]
                 inputs['pos_right'] = batch[7]
-                inputs['use_token_embeddings'] = USE_TOKEN_EMBEDDINGS
-                # 'left_indices': batch[6],
-                # 'right_indices': batch[7],
+                inputs['use_token_embeddings'] = True
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
@@ -516,11 +375,8 @@ def train(args):
             cur_train_steps += 1
             pbar.set_description(f'train_loss = {total_train_loss / cur_train_steps}')
 
-            # BP
+            # Backward
             if (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1 == len(train_dataloader)):
-                # if args.fp16:
-                #     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
-                # else:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 scheduler.step()  # Update learning rate schedule
                 optimizer.step()
@@ -541,7 +397,7 @@ def train(args):
         total_dev_loss = 0
         cur_dev_steps = 0
 
-        dev_result = evaluate(args, model, dev_dataset, id2label, device, TWO_LEVEL_EMBEDDINGS)
+        dev_result = evaluate(args, model, dev_dataset, id2label, device)
         dev_acc = dev_result['acc']
         dev_f1 = dev_result['f1']
         dev_loss = dev_result['loss']
@@ -570,14 +426,12 @@ def train(args):
 
         # Save best model
         is_best = len(dev_f1_history) == 0 or dev_f1 == max(dev_f1_history)
-        # is_best = len(dev_acc_history) == 0 or dev_acc == max(dev_acc_history)
         if is_best:
             model_dir = os.path.join(output_dir, 'models')
             os.makedirs(model_dir, exist_ok=True)
-            best_model_filename = os.path.join(output_dir, consts.FILENAME_BEST_MODEL)
-            torch.save(
-                {'model': model.state_dict()},
-                best_model_filename)
+            best_model_filename = os.path.join(output_dir,
+                                               consts.FILENAME_BEST_MODEL)
+            torch.save({'model': model.state_dict()}, best_model_filename)
     
     logger.info('Training finished')
 
@@ -609,14 +463,15 @@ def test(args):
         tokenizer_name=tokenizer_name,
         data_type='test',
         max_seq_len=args.eval_max_seq_length,
-        two_level_embeddings=TWO_LEVEL_EMBEDDINGS)
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
 
     # Test
     utils.set_seed(args.seed)
     logger.info('*** Testing ***')
     logger.info(f'  Num examples = {len(dataset)}')
     logger.info(f'  Batch size = {args.eval_batch_size}')
-    result = evaluate(args, model, dataset, id2label, device, TWO_LEVEL_EMBEDDINGS)
+    result = evaluate(args, model, dataset, id2label, device)
     
     acc = result['acc']
     f1 = result['f1']

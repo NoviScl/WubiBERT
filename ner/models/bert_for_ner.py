@@ -58,10 +58,13 @@ class BertCrfForNer(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None,
                 labels=None, input_lens=None, token_ids=None,
-                pos_left=None, pos_right=None, use_token_embeddings=True):
+                pos_left=None, pos_right=None, use_token_embeddings=False,
+                avg_char_tokens=False, char_ids=None):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, 
                             token_type_ids=token_type_ids, token_ids=token_ids,
-                            pos_left=pos_left, pos_right=pos_right, use_token_embeddings=use_token_embeddings)
+                            pos_left=pos_left, pos_right=pos_right,
+                            use_token_embeddings=use_token_embeddings,
+                            avg_char_tokens=avg_char_tokens, char_ids=char_ids)
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)

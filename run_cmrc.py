@@ -14,7 +14,6 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 
 import consts
-# from file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import modeling
 from tokenization import (
     ALL_TOKENIZERS,
@@ -25,12 +24,9 @@ from tokenization import (
     BertZhTokenizer
 )
 from optimization import BertAdam, warmup_linear, get_optimizer
-# from schedulers import LinearWarmUpScheduler
 from utils import (json_load_by_line, json_save_by_line, mkdir, get_freer_gpu, 
                    get_device, output_dir_to_tokenizer_name, load_tokenizer)
-# from run_pretraining import pretraining_dataset, WorkerInitObj
 
-# from mrc.google_albert_pytorch_modeling import AlbertConfig, AlbertForMRC
 from mrc.preprocess.cmrc2018_evaluate import get_eval
 from mrc.tools import official_tokenization, utils
 from mrc.preprocess.cmrc2018_output import write_predictions
@@ -58,7 +54,9 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
     output_nbest_file = file_preds.replace('predictions_', 'nbest_')
     
     all_examples_index = torch.arange(len(features), dtype=torch.long)
-    dataset = features_to_dataset(features, is_training=False, two_level_embeddings=args.two_level_embeddings)
+    dataset = features_to_dataset(features, is_training=False,
+                                  two_level_embeddings=args.two_level_embeddings,
+                                  avg_char_tokens=args.avg_char_tokens)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
 
     model.eval()
@@ -66,18 +64,19 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
     logger.info("Start evaluating")
     for batch in tqdm(dataloader, desc="Evaluating", mininterval=5.0):
         batch = tuple(t.to(device) for t in batch)
-        (input_ids, input_mask, segment_ids, example_indices,
-         token_ids, pos_left, pos_right) = expand_batch(batch, is_training=False, two_level_embeddings=args.two_level_embeddings)
+        tensors = expand_batch(batch, is_training=False,
+                               two_level_embeddings=args.two_level_embeddings,
+                               avg_char_tokens=args.avg_char_tokens)
+        # Some tuple elements are None depending on processing method.
+        (input_ids, input_mask, segment_ids, example_indices, token_ids, 
+         pos_left, pos_right) = tensors
 
         with torch.no_grad():
             batch_start_logits, batch_end_logits = model(
-                input_ids, 
-                segment_ids, 
-                input_mask,
-                token_ids=token_ids, 
-                pos_left=pos_left,
-                pos_right=pos_right,
-                use_token_embeddings=args.two_level_embeddings)
+                input_ids, segment_ids, input_mask, token_ids=token_ids, 
+                pos_left=pos_left, pos_right=pos_right,
+                use_token_embeddings=args.two_level_embeddings,
+                avg_char_tokens=args.avg_char_tokens)
         
         for i, example_index in enumerate(example_indices):
             start_logits = batch_start_logits[i].detach().cpu().tolist()
@@ -135,12 +134,14 @@ def parse_args():
     parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
     parser.add_argument('--do_test', action='store_true', help='Whether to test.')
     parser.add_argument('--two_level_embeddings', action='store_true')
+    parser.add_argument('--avg_char_tokens', action='store_true')
     parser.add_argument('--debug', action='store_true')
 
     return parser.parse_args()
 
 
-def features_to_dataset(features, is_training, two_level_embeddings):
+def features_to_dataset(features: list, is_training: bool, two_level_embeddings, 
+                        avg_char_tokens) -> TensorDataset:
     '''
     Turn list of features into Tensor datasets
     '''
@@ -152,23 +153,7 @@ def features_to_dataset(features, is_training, two_level_embeddings):
         all_end_positions = torch.tensor([f['end_position'] for f in features], dtype=torch.long)
     else:
         all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-    if not two_level_embeddings:
-        if is_training:
-            return TensorDataset(
-                all_input_ids,
-                all_input_mask,
-                all_segment_ids,
-                all_start_positions,
-                all_end_positions,
-            )
-        else:
-            return TensorDataset(
-                all_input_ids,
-                all_input_mask,
-                all_segment_ids,
-                all_example_index,
-            )
-    else:
+    def get_features_tle():
         all_token_ids = torch.tensor([f['token_ids'] for f in features], dtype=torch.long)
         all_pos_left = torch.tensor([f['pos_left'] for f in features], dtype=torch.long)
         all_pos_right = torch.tensor([f['pos_right'] for f in features], dtype=torch.long)
@@ -193,9 +178,59 @@ def features_to_dataset(features, is_training, two_level_embeddings):
                 all_pos_left,
                 all_pos_right,
             )
+        
+    def get_features_act():
+        all_char_ids = torch.tensor([f['char_ids'] for f in features], dtype=torch.long)
+        if is_training:
+            return TensorDataset(
+                all_input_ids,
+                all_input_mask,
+                all_segment_ids,
+                all_start_positions,
+                all_end_positions,
+                all_char_ids,
+            )
+        else:
+            return TensorDataset(
+                all_input_ids,
+                all_input_mask,
+                all_segment_ids,
+                all_example_index,
+                all_char_ids,
+            )
+        
+    if two_level_embeddings:
+        return get_features_tle()
+    elif avg_char_tokens:
+        return get_features_act()
+    else:
+        if is_training:
+            return TensorDataset(
+                all_input_ids,
+                all_input_mask,
+                all_segment_ids,
+                all_start_positions,
+                all_end_positions,
+            )
+        else:
+            return TensorDataset(
+                all_input_ids,
+                all_input_mask,
+                all_segment_ids,
+                all_example_index,
+            )
 
 
-def expand_batch(batch, is_training, two_level_embeddings):
+def expand_batch(batch, is_training, two_level_embeddings, avg_char_tokens) -> tuple:
+    '''Expand batch into a tuple.
+    
+    Return `(input_ids, input_mask, segment_ids, start_positions, end_positions,
+    token_ids, pos_left, pos_right)` or `(input_ids, input_mask, segment_ids,
+    example_index, token_ids, pos_left, pos_right)`, depending on `is_training`. 
+    
+    The last 3 elements in might be none depending on `two_level_embeddings` and
+    `avg_char_tokens`.
+    '''
     input_ids = batch[0]
     input_mask = batch[1]
     segment_ids = batch[2]
@@ -206,6 +241,9 @@ def expand_batch(batch, is_training, two_level_embeddings):
         token_ids = batch[-3]
         pos_left = batch[-2]
         pos_right = batch[-1]
+    elif avg_char_tokens:
+        char_ids = batch[-1]
+        token_ids = char_ids  # Use `token_ids` to reduce param count
     if is_training:
         start_positions = batch[3]
         end_positions = batch[4]
@@ -217,26 +255,23 @@ def expand_batch(batch, is_training, two_level_embeddings):
                 token_ids, pos_left, pos_right)
 
 
-def get_filename_examples_and_features(
-    data_type,
-    data_dir,
-    max_seq_length,
-    tokenizer_name,
-    vocab_size,
-    two_level_embeddings=False):
+def get_filename_examples_and_features(data_type: str, args, tokenizer_name: str,
+                                       vocab_size: int):
     '''
     Return:
         example_file: str,
         feature_file: str,
     '''
-    if two_level_embeddings:
-        suffix = '_{}_{}_{}_twolevel'.format(str(max_seq_length), tokenizer_name, str(vocab_size))
-        suffix_ex = '_examples_twolevel.json'
+    # suffix = '_{}_{}_{}'.format(str(args.max_seq_length), tokenizer_name, str(vocab_size))
+    suffix_ex = '_examples.json'
+    if args.two_level_embeddings:
+        suffix = '_{}_{}_{}_twolevel'.format(str(args.max_seq_length), tokenizer_name, str(vocab_size))
+    elif args.avg_char_tokens:
+        suffix = '_{}_{}_{}_chartokens'.format(str(args.max_seq_length), tokenizer_name, str(vocab_size))
     else:
-        suffix = '_{}_{}_{}'.format(str(max_seq_length), tokenizer_name, str(vocab_size))
-        suffix_ex = '_examples.json'
-    file_examples = os.path.join(data_dir, data_type + suffix_ex)
-    file_features = os.path.join(data_dir, data_type + '_features' + suffix + '.json')
+        suffix = '_{}_{}_{}'.format(str(args.max_seq_length), tokenizer_name, str(vocab_size))
+    file_examples = os.path.join(args.data_dir, data_type + suffix_ex)
+    file_features = os.path.join(args.data_dir, data_type + '_features' + suffix + '.json')
     return file_examples, file_features
 
 
@@ -249,7 +284,8 @@ def gen_examples_and_features(
     max_seq_length,
     max_query_length=64,
     doc_stride=128,
-    two_level_embeddings=False
+    two_level_embeddings=False,
+    avg_char_tokens=False,
     ):
     '''
     Return:
@@ -258,7 +294,7 @@ def gen_examples_and_features(
     '''
 
     use_example_cache = True
-    use_feature_cache = True
+    use_feature_cache = False
 
     examples, features = None, None
     # Examples
@@ -268,8 +304,7 @@ def gen_examples_and_features(
         logger.info(f'Loaded {len(examples)} examples')
     else:
         logger.info('Example file not found, generating...')
-        examples, mismatch = read_cmrc_examples(file_data, is_training, 
-                                                two_level_embeddings=two_level_embeddings)
+        examples, mismatch = read_cmrc_examples(file_data, is_training)
         logger.info(f'num examples: {len(examples)}')
         logger.info(f'mismatch: {mismatch}')
         logger.info(f'Generated {len(examples)} examples')
@@ -277,7 +312,7 @@ def gen_examples_and_features(
         logger.info(f'Saving to "{file_examples}"...')
         json_save_by_line(examples, file_examples)
         logger.info(f'Saved {len(examples)} examples')
-        # Somehow, just saving will result in all empty evaluation
+        # Somehow, just saving will result in all empty evaluation XD
         logger.info(f'Loading from "{file_examples}"...')
         examples = json_load_by_line(file_examples)
         logger.info(f'Loaded {len(examples)} examples')
@@ -290,12 +325,9 @@ def gen_examples_and_features(
     else:
         logger.info('Feature file not found, generating...')
         features = convert_examples_to_features(
-            examples,
-            tokenizer,
-            # is_training=is_training,
-            max_seq_length=max_seq_length,
+            examples, tokenizer, max_seq_length=max_seq_length,
             two_level_embeddings=two_level_embeddings,
-        )
+            avg_char_tokens=avg_char_tokens)
         logger.info(f'Generated {len(features)} features')
         logger.info(f'Saving to "{file_features}"...')
         json_save_by_line(features, file_features)
@@ -363,19 +395,9 @@ def train(args):
     file_train = os.path.join(args.data_dir, 'train.json')
     file_dev = os.path.join(args.data_dir, 'dev.json')
     file_train_examples, file_train_features = get_filename_examples_and_features(
-        'train',
-        args.data_dir,
-        args.max_seq_length,
-        tokenizer_name=tokenizer_name,
-        vocab_size=config.vocab_size,
-        two_level_embeddings=args.two_level_embeddings)
+        'train', args, tokenizer_name=tokenizer_name, vocab_size=config.vocab_size)
     file_dev_examples, file_dev_features = get_filename_examples_and_features(
-        'dev',
-        args.data_dir,
-        args.max_seq_length,
-        tokenizer_name=tokenizer_name,
-        vocab_size=config.vocab_size,
-        two_level_embeddings=args.two_level_embeddings)
+        'dev', args, tokenizer_name=tokenizer_name, vocab_size=config.vocab_size)
     # Generate train examples and features
     logger.info('Generating train data:')
     logger.info(f'  file_examples: {file_train_examples}')
@@ -388,7 +410,8 @@ def train(args):
         is_training=True,
         tokenizer=tokenizer,
         max_seq_length=args.max_seq_length,
-        two_level_embeddings=args.two_level_embeddings)
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
     logger.info('Generating dev data:')
     logger.info(f'  file_examples: {file_dev_examples}')
     logger.info(f'  file_features: {file_dev_features}')
@@ -399,7 +422,8 @@ def train(args):
         is_training=False,
         tokenizer=tokenizer,
         max_seq_length=args.max_seq_length,
-        two_level_embeddings=args.two_level_embeddings)
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
     del train_examples  # Only need examples for predictions
     logger.info('Done generating data')
 
@@ -429,7 +453,9 @@ def train(args):
         weight_decay_rate=args.weight_decay_rate)
 
     # Train and evaluation
-    train_data = features_to_dataset(train_features, is_training=True, two_level_embeddings=args.two_level_embeddings)
+    train_data = features_to_dataset(train_features, is_training=True,
+                                     two_level_embeddings=args.two_level_embeddings,
+                                     avg_char_tokens=args.avg_char_tokens)
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
 
     logger.info('***** Training *****')
@@ -455,13 +481,16 @@ def train(args):
         with tqdm(total=train_steps_per_epoch, desc='Epoch %d' % (ep + 1), mininterval=5.0) as pbar:
             for step, batch in enumerate(train_dataloader):
                 batch = tuple(t.to(device) for t in batch)
-                expand_batch(batch, is_training=True, two_level_embeddings=args.two_level_embeddings)
+                tensors = expand_batch(batch, is_training=True,
+                                       two_level_embeddings=args.two_level_embeddings,
+                                       avg_char_tokens=args.avg_char_tokens)
                 (input_ids, input_mask, segment_ids, start_positions, end_positions,
-                 token_ids, pos_left, pos_right) = batch
+                 token_ids, pos_left, pos_right) = tensors
 
                 loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
                              token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                             use_token_embeddings=args.two_level_embeddings)
+                             use_token_embeddings=args.two_level_embeddings,
+                             avg_char_tokens=args.avg_char_tokens)
                 if n_gpu > 1:
                     loss = loss.mean()  # mean() to average on multi-gpu.
                 total_loss = loss.item()
@@ -531,7 +560,7 @@ def train(args):
     torch.cuda.empty_cache()
 
     print('Training finished')
-    
+
 
 def test(args):
     logger.info('Test')
@@ -573,12 +602,7 @@ def test(args):
     tokenizer_name = output_dir_to_tokenizer_name(args.output_dir)
     file_data = os.path.join(args.data_dir, 'test.json')
     file_examples, file_features = get_filename_examples_and_features(
-        'test',
-        args.data_dir,
-        args.max_seq_length,
-        tokenizer_name=tokenizer_name,
-        vocab_size=config.vocab_size,
-        two_level_embeddings=args.two_level_embeddings)
+        'test', args, tokenizer_name=tokenizer_name, vocab_size=config.vocab_size)
     # Generate train examples and features
     logger.info('Generating data:')
     logger.info(f'  file_examples: {file_examples}')
@@ -590,7 +614,8 @@ def test(args):
         is_training=False,
         tokenizer=tokenizer,
         max_seq_length=args.max_seq_length,
-        two_level_embeddings=args.two_level_embeddings)
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
     logger.info('Done generating data')
 
     logger.info('***** Testing *****')
@@ -618,6 +643,10 @@ def test(args):
 
 
 def main(args):
+    # Sanity check
+    assert sum([args.two_level_embeddings, args.avg_char_tokens]) == 1
+    assert args.gradient_accumulation_steps > 0
+    
     if args.do_train:
         train(args)
     if args.do_test:

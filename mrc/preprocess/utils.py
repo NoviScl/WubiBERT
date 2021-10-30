@@ -156,11 +156,7 @@ def get_subchar_pos(tokens, subchars):
 
 
 def convert_examples_to_features_twolevel(
-    examples,
-    tokenizer,
-    max_seq_length=512,
-    max_query_length=64,
-    doc_stride=128,
+    examples, tokenizer, max_seq_length=512, max_query_length=64, doc_stride=128,
     include_long_tokens=False):
 
     features = []
@@ -240,8 +236,6 @@ def convert_examples_to_features_twolevel(
             # Feature format:
             #    tokens      = [CLS] + <query tokens> + [SEP] + <all_doc_token> + [SEP]
             #    segment_id  =   0   0  ...               0   0   1   1   ...    1  1
-            #    long_tokens = ...
-            #    subchar_pos = ...
             #
             cls_token = '[CLS]'
             sep_token = '[SEP]'
@@ -380,6 +374,157 @@ def convert_examples_to_features_twolevel(
     return features
 
 
+def convert_examples_to_features_chartokens(
+    examples, tokenizer, max_seq_length=512, max_query_length=64, doc_stride=128):
+
+    features = []
+    unique_id = 1000000000
+    for (example_index, example) in enumerate(tqdm(examples)):
+        query_tokens = tokenizer.tokenize(example['question'])
+        if len(query_tokens) > max_query_length:
+            query_tokens = query_tokens[0:max_query_length]
+
+        tok_to_orig_index = []
+        orig_to_tok_index = []  #TODO: Map to char instead of subchars
+        all_doc_tokens = []
+        all_char_ids = []   # [1, 1, 2] given tokens = ["Mach", "##ine", "learning"] 
+        for (i, token) in enumerate(example['doc_tokens']):
+            orig_to_tok_index.append(len(all_doc_tokens))
+            sub_tokens = tokenizer.tokenize(token)
+            for sub_token in sub_tokens:
+                tok_to_orig_index.append(i)
+                all_doc_tokens.append(sub_token)
+                all_char_ids.append(i + 1)
+
+        # tok_start_position = None
+        # tok_end_position = None
+        # tok_start_position = orig_to_tok_index[example['start_position']]  # 原来token到新token的映射，这是新token的起点
+        # if example['end_position'] < len(example['doc_tokens']) - 1:
+        #     tok_end_position = orig_to_tok_index[example['end_position'] + 1] - 1
+        # else:
+        #     tok_end_position = len(all_doc_tokens) - 1
+        # (tok_start_position, tok_end_position) = _improve_answer_span(
+        #     all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
+        #     example['orig_answer_text'])
+        
+        # 答案在原文的位置
+        tok_start_position = example['start_position']
+        tok_end_position = example['end_position']
+
+        # The -3 accounts for [CLS], [SEP] and [SEP]
+        max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
+
+        doc_spans = []
+        _DocSpan = collections.namedtuple("DocSpan", ["start", "length"])
+        start_offset = 0
+        while start_offset < len(all_doc_tokens):
+            length = len(all_doc_tokens) - start_offset
+            if length > max_tokens_for_doc:
+                length = max_tokens_for_doc
+            doc_spans.append(_DocSpan(start=start_offset, length=length))
+            if start_offset + length == len(all_doc_tokens):
+                break
+            start_offset += min(length, doc_stride)
+
+        for (doc_span_index, doc_span) in enumerate(doc_spans):
+            #
+            # Feature format:
+            #    tokens      = [CLS] + <query tokens> + [SEP] + <all_doc_token> + [SEP]
+            #    segment_id  =   0      ...               0      1   1   ...        1
+            #
+            cls_token = '[CLS]'
+            sep_token = '[SEP]'
+            tokens = []
+            token_to_orig_map = {}
+            token_is_max_context = {}
+            segment_ids = []
+            char_ids = [] # i'th element's value x means that (subchar) token i belongs the x'th char.
+
+            tokens.append(cls_token)
+            segment_ids.append(0)
+            char_ids.append(0)
+            for token in query_tokens:
+                tokens.append(token)
+                segment_ids.append(0)
+                char_ids.append(0)  # Doesn't matter, will be ignored
+            tokens.append(sep_token)
+            segment_ids.append(0)
+            char_ids.append(0)
+
+            for i in range(doc_span.length):
+                split_token_index = doc_span.start + i
+                token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
+                is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
+                token_is_max_context[len(tokens)] = is_max_context
+                tokens.append(all_doc_tokens[split_token_index])
+                char_ids.append(all_char_ids[split_token_index])
+            tokens.append(sep_token)
+            char_ids.append(char_ids[-1] + 1)  # [SEP] is a word of its own
+            
+            # Append to n `1` to `segment_ids`, n = number of characters in this span.
+            char_min_idx = all_char_ids[doc_span.start]
+            char_max_idx = char_ids[-2]
+            num_chars = char_max_idx - char_min_idx + 1
+            segment_ids += [1] * (num_chars + 1)   # +1 because of [SEP] at the end.
+
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+
+            # The mask has 1 for real tokens and 0 for padding tokens. Only real
+            # tokens are attended to.
+            input_mask = [1] * len(segment_ids)
+
+            # Zero-pad up to the sequence length.
+            while len(input_ids) < max_seq_length:   # Padding for subchars
+                input_ids.append(0)
+                char_ids.append(0)
+            while len(segment_ids) < max_seq_length: # Padding for chars
+                segment_ids.append(0)
+                input_mask.append(0)
+
+            assert len(input_ids) == max_seq_length
+            assert len(input_mask) == max_seq_length
+            assert len(segment_ids) == max_seq_length
+            assert len(char_ids) == max_seq_length
+
+            start_position = None
+            end_position = None
+            
+            # If our document span does not contain an annotation
+            # we throw it out, since there is nothing to predict.
+            if tok_start_position == -1 and tok_end_position == -1:
+                start_position = 0  # 问题本来没答案，0是[CLS]的位子
+                end_position = 0
+            else:  # 如果原本是有答案的，那么去除没有答案的feature
+                out_of_span = False
+                # 原文的起点和终点
+                doc_start = tok_to_orig_index[doc_span.start]
+                doc_end = tok_to_orig_index[doc_span.start + doc_span.length - 1]
+
+                if doc_start <= tok_start_position and tok_end_position <= doc_end:  
+                    offset = len(query_tokens) + 2
+                    start_position = tok_start_position - doc_start + offset
+                    end_position = tok_end_position - doc_start + offset
+                else: # 该划窗没答案作为无答案增强
+                    start_position = 0
+                    end_position = 0
+
+            features.append({'unique_id': unique_id,
+                             'example_index': example_index,
+                             'doc_span_index': doc_span_index,
+                             'tokens': tokens,
+                             'token_to_orig_map': token_to_orig_map,
+                             'token_is_max_context': token_is_max_context,
+                             'input_ids': input_ids,
+                             'input_mask': input_mask,
+                             'segment_ids': segment_ids,
+                             'start_position': start_position,
+                             'end_position': end_position,
+                             'char_ids': char_ids})
+            unique_id += 1
+
+    return features
+
+
 def _convert_examples_to_features(
     examples,
     tokenizer,
@@ -387,7 +532,8 @@ def _convert_examples_to_features(
     max_query_length=64,
     doc_stride=128,
     two_level_embeddings=False,
-    include_long_tokens=False):
+    include_long_tokens=False,
+    avg_char_tokens=False):
     if two_level_embeddings:
         return convert_examples_to_features_twolevel(
             examples,
@@ -397,6 +543,16 @@ def _convert_examples_to_features(
             doc_stride=doc_stride,
             include_long_tokens=include_long_tokens,
         )
+    
+    if avg_char_tokens:
+        return convert_examples_to_features_chartokens(
+            examples, tokenizer,
+            max_seq_length=max_seq_length,
+            max_query_length=max_query_length,
+            doc_stride=doc_stride,
+        )
+
+    raise NotImplementedError
 
     features = []
     unique_id = 1000000000

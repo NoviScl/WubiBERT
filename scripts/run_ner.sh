@@ -18,7 +18,10 @@ gradient_accumulation_steps=${gradient_accumulation_steps:-"2"}
 learning_rate=${10:-"2e-5"}
 warmup_proportion=${11:-"0.1"}
 max_seq_length=${max_seq_length:-512}
+
 fewshot=${fewshot:-1}
+avg_char_tokens=${avg_char_tokens:-""}
+two_level_embeddings=${two_level_embeddings:-""}
 
 CMD="python3"
 CMD+=" run_ner.py "
@@ -36,6 +39,15 @@ if [[ $mode == *"eval"* ]] || [[ $mode == *"test"* ]]; then
   fi
   CMD+="--eval_batch_size=$batch_size "
 fi
+
+if [ $avg_char_tokens -eq 1 ] ; then
+  CMD+="--avg_char_tokens "
+fi
+
+if [ $two_level_embeddings -eq 1 ] ; then
+  CMD+="--two_level_embeddings "
+fi
+
 CMD+="--gradient_accumulation_steps=$gradient_accumulation_steps "
 
 CMD+="--tokenizer_type $tokenizer_type "

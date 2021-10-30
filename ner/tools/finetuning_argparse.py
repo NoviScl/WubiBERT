@@ -68,4 +68,8 @@ def get_argparse():
     parser.add_argument("--overwrite_cache", action="store_true",
                         help="Overwrite the cached training and evaluation sets")
     parser.add_argument("--seed", type=int, default=0, help="random seed for initialization")
+    
+    parser.add_argument("--avg_char_tokens", action="store_true")
+    parser.add_argument("--two_level_embeddings", action="store_true")
+    
     return parser
