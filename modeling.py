@@ -364,6 +364,8 @@ class BertEmbeddings(nn.Module):
         position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
 
         if avg_char_tokens:
+            # Get char embeddings by taking the average of the embeddings of
+            # its subchars.
             subchar_embeddings = self.word_embeddings(input_ids)  # (B, L, D)
             char_ids = token_ids  # Reuse token_ids to save one parameter
             B, L, D = subchar_embeddings.size()
@@ -393,6 +395,8 @@ class BertEmbeddings(nn.Module):
                     while i < L and char_ids[b][i] == 0:
                         i += 1
         elif use_token_embeddings:
+            # For each subchar, add the average of token embeddings that overlap
+            # with it.
             subchar_embeddings = self.word_embeddings(input_ids)  # (B, L, D)
             token_embeddings = self.word_embeddings(token_ids)    # (B, L, D)
             # Add mean of corresponding token embeddings to subchar embeddings.

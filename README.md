@@ -9,8 +9,7 @@ You can use ```split_data.py``` to do the dev set splitting, but remember to kee
 
 ## Finetuning
 
-You can run one of the following python code to do finetuning depending on which
-task you want to finetune on. Note that different task/code might need different arguments. 
+You can run one of the following python code to do finetuning depending on which task you want to finetune on. Note that different task/code might need different arguments. 
 
 - `run_glue.py`: classification tasks such as TNews, IFlytek, OCNLI etc.
 - `run_multichoice_mrc.py`: CHID
@@ -27,7 +26,7 @@ python3 run_glue.py \
   --test_dir=datasets/tnews/split \
   --do_train --do_eval --do_test \
   --init_checkpoint=checkpoints/checkpoints_pinyin_zh_22675/ckpt_8804.pt \
-  --output_dir=logs/tnews/pinyin/ckpt_8804 \
+  --output_dir=logs/pinyin_tnews \
   --tokenizer_type=CommonZh \
   --vocab_file=tokenizers/pinyin_zh_22675.vocab \
   --vocab_model_file=tokenizers/pinyin_zh_22675.model \

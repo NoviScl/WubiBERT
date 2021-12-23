@@ -385,7 +385,6 @@ def train(args):
 
     # Tokenizer
     logger.info('Loading tokenizer...')
-    # tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     tokenizer = load_tokenizer(args)
     logger.info('Loaded tokenizer')
 
@@ -593,7 +592,6 @@ def test(args):
 
     # Tokenizer
     logger.info('Loading tokenizer...')
-    # tokenizer = ALL_TOKENIZERS[args.tokenizer_type](args.vocab_file, args.vocab_model_file)
     tokenizer = load_tokenizer(args)
     logger.info('Loaded tokenizer')
 

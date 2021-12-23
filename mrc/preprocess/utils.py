@@ -435,8 +435,10 @@ def convert_examples_to_features_chartokens(
             cls_token = '[CLS]'
             sep_token = '[SEP]'
             tokens = []
-            token_to_orig_map = {}
-            token_is_max_context = {}
+            # token_to_orig_map = {}
+            char_to_orig_map = {}
+            # token_is_max_context = {}
+            char_is_max_context = {}
             segment_ids = []
             char_ids = [] # i'th element's value x means that (subchar) token i belongs the x'th char.
 
@@ -453,9 +455,9 @@ def convert_examples_to_features_chartokens(
 
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
-                token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
-                is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
-                token_is_max_context[len(tokens)] = is_max_context
+                # token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
+                # is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
+                # token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
                 char_ids.append(all_char_ids[split_token_index])
             tokens.append(sep_token)
@@ -465,7 +467,17 @@ def convert_examples_to_features_chartokens(
             char_min_idx = all_char_ids[doc_span.start]
             char_max_idx = char_ids[-2]
             num_chars = char_max_idx - char_min_idx + 1
-            segment_ids += [1] * (num_chars + 1)   # +1 because of [SEP] at the end.
+            
+            # Create `char_to_orig_map` to match `cmrc2018_output.py`'s `write_predictions`.
+            # It's just a simple map from (char) index of this span to index in the text.
+            # Also save whether each char is max context (see `_check_is_max_context`)
+            # +1 because of [SEP] at the end.
+            for i in range(num_chars + 1):
+                char_index = doc_span.start + i
+                char_to_orig_map[len(segment_ids)] = char_index 
+                is_max_context = _check_is_max_context(doc_spans, doc_span_index, char_index)
+                char_is_max_context[len(segment_ids)] = is_max_context
+                segment_ids += [1]
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -508,12 +520,17 @@ def convert_examples_to_features_chartokens(
                     start_position = 0
                     end_position = 0
 
+            
             features.append({'unique_id': unique_id,
                              'example_index': example_index,
                              'doc_span_index': doc_span_index,
                              'tokens': tokens,
-                             'token_to_orig_map': token_to_orig_map,
-                             'token_is_max_context': token_is_max_context,
+                             # Replacing token mapping before model will be making predictions on characters
+                            #  'token_to_orig_map': token_to_orig_map,
+                             'token_to_orig_map': char_to_orig_map,
+                             
+                            #  'token_is_max_context': token_is_max_context,
+                             'token_is_max_context': char_is_max_context,
                              'input_ids': input_ids,
                              'input_mask': input_mask,
                              'segment_ids': segment_ids,

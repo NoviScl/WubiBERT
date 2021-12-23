@@ -163,13 +163,13 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                       two_level_embeddings=False):
     """Write final predictions to the json file and log-odds of null if needed."""
     
-    if two_level_embeddings:
-        return write_predictions_twolevel(
-            all_examples, all_features, all_results, n_best_size,
-            max_answer_length, do_lower_case, output_prediction_file,
-            output_nbest_file, version_2_with_negative=version_2_with_negative, 
-            null_score_diff_threshold=null_score_diff_threshold,
-        )
+    # if two_level_embeddings:
+    #     return write_predictions_twolevel(
+    #         all_examples, all_features, all_results, n_best_size,
+    #         max_answer_length, do_lower_case, output_prediction_file,
+    #         output_nbest_file, version_2_with_negative=version_2_with_negative, 
+    #         null_score_diff_threshold=null_score_diff_threshold,
+    #     )
     
     print("Writing predictions to: %s" % (output_prediction_file))
     print("Writing nbest to: %s" % (output_nbest_file))

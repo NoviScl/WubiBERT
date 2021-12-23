@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -G 1
 python3 finetune.py \
-  --tokenizer pinyin \
+  --tokenizer raw \
   --task cmrc \
-  --seed 15 \
+  --seed 18 \
   --char_pred chartokens
