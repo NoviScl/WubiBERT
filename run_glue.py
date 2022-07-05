@@ -17,41 +17,38 @@
 
 from __future__ import absolute_import, division, print_function
 
-import pickle
+from pathlib import Path
 import argparse
-import logging
+# import logging
 import os
-import random
 import json
-import time
+from time import time
 # from shutil import copyfile
 
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
 import consts
 import modeling
-from optimization import BertAdam, warmup_linear
+from optimization import BertAdam
 from schedulers import LinearWarmUpScheduler
-from apex import amp
+# from apex import amp
 from sklearn.metrics import matthews_corrcoef, f1_score
 import utils
-from utils import (is_main_process, mkdir_by_main_process, format_step,
-                   get_world_size, get_freer_gpu)
+from utils import is_main_process
 from processors.glue import PROCESSORS, convert_examples_to_features
 
-torch._C._jit_set_profiling_mode(False)
-torch._C._jit_set_profiling_executor(False)
+# torch._C._jit_set_profiling_mode(False)
+# torch._C._jit_set_profiling_executor(False)
 
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-    datefmt='%m/%d/%Y %H:%M:%S',
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(
+#     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+#     datefmt='%m/%d/%Y %H:%M:%S',
+#     level=logging.INFO,
+# )
+# logger = logging.getLogger(__name__)
 
 FILENAME_BEST_MODEL = 'best_model.bin'
 FILENAME_TEST_RESULT = 'result_test.txt'
@@ -60,12 +57,12 @@ def compute_metrics(task_name, preds, labels):
     assert len(preds) == len(labels)
     if task_name == "cola":
         return {"mcc": matthews_corrcoef(labels, preds)}
-    elif task_name == "sst-2":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "mrpc":
-        return acc_and_f1(preds, labels)
-    elif task_name == "sts-b":
-        return pearson_and_spearman(preds, labels)
+    # elif task_name == "sst-2":
+    #     return {"acc": simple_accuracy(preds, labels)}
+    # elif task_name == "mrpc":
+    #     return acc_and_f1(preds, labels)
+    # elif task_name == "sts-b":
+        # return pearson_and_spearman(preds, labels)
     elif task_name == "qqp":
         return acc_and_f1(preds, labels)
     elif task_name == "mnli":
@@ -80,11 +77,19 @@ def compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     else:
         # use acc for other classification tasks. Add exceptions above.
-        return {"acc": simple_accuracy(preds, labels)}
+        return {
+            "acc": simple_accuracy(preds, labels),
+            "macro_f1": f1_score(labels, preds, average='macro'),
+            'micro_f1': f1_score(labels, preds, average='micro'),
+        }
 
 
 def simple_accuracy(preds, labels):
-    return (preds == labels).mean()
+    correct = 0
+    for p, l in zip(preds, labels):
+        if p == l:
+            correct += 1
+    return correct / len(preds)
 
 
 def acc_and_f1(preds, labels):
@@ -97,12 +102,7 @@ def acc_and_f1(preds, labels):
     }
 
 
-def accuracy(out, labels):
-    outputs = np.argmax(out, axis=1)
-    return np.sum(outputs == labels)
-
-
-from apex.multi_tensor_apply import multi_tensor_applier
+# from apex.multi_tensor_apply import multi_tensor_applier
 
 
 class GradientClipper:
@@ -140,62 +140,44 @@ class GradientClipper:
             )
 
 
-def parse_args(parser=argparse.ArgumentParser()):
+def parse_args(p=argparse.ArgumentParser()):
     ## Required parameters
-    parser.add_argument('--train_dir', type=str)
-    parser.add_argument('--dev_dir', type=str)
-    parser.add_argument('--test_dir', type=str)
-    parser.add_argument("--task_name", type=str, required=True, choices=PROCESSORS.keys())
-    parser.add_argument("--output_dir", type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
-    parser.add_argument("--init_checkpoint", type=str, required=True, help="The checkpoint file from pretraining",)
-    parser.add_argument('--tokenizer_type', type=str, required=True, help="Type of tokenizer")
-    parser.add_argument('--vocab_file', type=str, required=True, help="Vocabulary mapping/file BERT was pretrainined on")
-    parser.add_argument('--vocab_model_file', type=str, required=True, help="Model file for sentencepiece")
-    parser.add_argument("--config_file", type=str, required=True, help="The BERT model config")
+    p.add_argument('--train_dir', type=str)
+    p.add_argument('--dev_dir', type=str)
+    p.add_argument('--test_dir', type=str)
+    p.add_argument("--task_name", type=str, required=True)
+    p.add_argument("--output_dir", type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
+    p.add_argument("--init_ckpt", type=str, required=True, help="The checkpoint file from pretraining",)
+    p.add_argument('--tokenizer_type', type=str, required=True, help="Type of tokenizer")
+    p.add_argument('--vocab_file', type=str, required=True, help="Vocabulary mapping/file BERT was pretrainined on")
+    p.add_argument('--vocab_model_file', type=str, required=True, help="Model file for sentencepiece")
+    p.add_argument("--config_file", type=str, required=True, help="The BERT model config")
+    p.add_argument('--test_name', default='test_clean')
 
     ## Other parameters
-    parser.add_argument("--max_seq_length", default=128, type=int,
-        help="Maximum total input sequence length after WordPiece tokenization.")
-    parser.add_argument("--do_train", action='store_true')
-    parser.add_argument("--do_eval", action='store_true')
-    parser.add_argument("--do_test", action='store_true')
-    parser.add_argument("--train_batch_size", default=32, type=int,)
-    parser.add_argument("--eval_batch_size", default=8, type=int)
-    parser.add_argument("--learning_rate", default=2e-5, type=float)
-    parser.add_argument("--epochs", default=-1, type=int)
-    parser.add_argument(
-        "--warmup_proportion",
-        default=0.1,
-        type=float,
-        help="Proportion of training to perform linear learning rate warmup "
-        "for. E.g., 0.1 = 10%% of training.",
-    )
-    parser.add_argument("--no_cuda", action='store_true', 
-                        help="If true, don't use CUDA")
-    parser.add_argument('--seed',
-                        type=int,
-                        default=1,
-                        help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
-    parser.add_argument(
-        '--loss_scale',
-        type=float,
-        default=0,
-        help="Loss scaling to improve fp16 numeric stability. Only used when "
-        "fp16 set to True.\n"
-        "0 (default value): dynamic loss scaling.\n"
-        "Positive power of 2: static loss scaling value.\n",
-    )
-    parser.add_argument('--skip_checkpoint', action='store_true', help="Whether to save checkpoints")
-    parser.add_argument('--two_level_embeddings', action="store_true")
-    parser.add_argument('--fewshot', type=int, default=0)
-    parser.add_argument('--test_model', type=str, default=None)
-    parser.add_argument('--cws_vocab_file', type=str, default=None)
-    parser.add_argument('--pack_seq', action='store_true', help='Whether to pack multiple sequences into one input sequence')
-    return parser.parse_args()
+    p.add_argument("--max_seq_length", default=128, type=int)
+    p.add_argument("--do_train", action='store_true')
+    p.add_argument("--do_test", action='store_true')
+    p.add_argument("--train_batch_size", default=32, type=int,)
+    p.add_argument("--eval_batch_size", default=8, type=int)
+    p.add_argument("--lr", default=2e-5, type=float)
+    p.add_argument("--epochs", default=-1, type=int)
+    p.add_argument("--warmup_prop", default=0.1, type=float, help="Proportion of training to perform linear learning rate warmup ")
+    p.add_argument("--no_cuda", action='store_true', help="If true, don't use CUDA")
+    p.add_argument('--seed', type=int, default=0)
+    p.add_argument('--grad_acc_steps', type=int, default=1)
+    p.add_argument('--loss_scale', type=float, default=0)
+    p.add_argument('--skip_checkpoint', action='store_true', help="Whether to save checkpoints")
+    p.add_argument('--two_level_embeddings', action="store_true")
+    p.add_argument('--tokenize_char_by_char', action="store_true")
+    p.add_argument('--fewshot', type=int, default=0)
+    p.add_argument('--test_model', type=str, default=None)
+    p.add_argument('--cws_vocab_file', type=str, default=None)
+    p.add_argument('--log_interval', type=int, default=40)
+    return p.parse_args()
 
 
-def init_optimizer_and_amp(model, learning_rate, loss_scale, warmup_proportion,
+def init_optimizer_and_amp(model, lr, loss_scale, warmup_proportion,
                            num_train_optimization_steps, use_fp16):
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -216,7 +198,7 @@ def init_optimizer_and_amp(model, learning_rate, loss_scale, warmup_proportion,
     ]
     optimizer, scheduler = None, None
     if use_fp16:
-        logger.info("using fp16")
+        print("using fp16")
         try:
             from apex.optimizers import FusedAdam
         except ImportError:
@@ -227,7 +209,7 @@ def init_optimizer_and_amp(model, learning_rate, loss_scale, warmup_proportion,
         if num_train_optimization_steps is not None:
             optimizer = FusedAdam(
                 optimizer_grouped_parameters,
-                lr=learning_rate,
+                lr=lr,
                 bias_correction=False,
             )
         amp_inits = amp.initialize(
@@ -247,13 +229,18 @@ def init_optimizer_and_amp(model, learning_rate, loss_scale, warmup_proportion,
                 total_steps=num_train_optimization_steps,
             )
     else:
-        logger.info("using fp32")
+        print("using fp32")
         if num_train_optimization_steps is not None:
             optimizer = BertAdam(
                 optimizer_grouped_parameters,
-                lr=learning_rate,
+                lr=lr,
                 warmup=warmup_proportion,
                 t_total=num_train_optimization_steps,
+            )
+            scheduler = LinearWarmUpScheduler(
+                optimizer,
+                warmup=warmup_proportion,
+                total_steps=num_train_optimization_steps,
             )
     return model, optimizer, scheduler
 
@@ -306,40 +293,12 @@ def gen_tensor_dataset(features, two_level_embeddings):
         )
 
 
-def get_train_features(data_dir, max_seq_length, tokenizer, processor, 
-                       two_level_embeddings=False, pack_seq=False):
-    use_cache = False
-    # Get cache file name based on parameters
-    tok_name = utils.name_of_tokenizer(tokenizer)
-    cache_file = f'cache_train_{max_seq_length}_{tok_name}'
-    if pack_seq:
-        cache_file += '_packseq'    
-    cache_file = os.path.join(data_dir, cache_file + '.pkl')
-    if use_cache and os.path.exists(cache_file):
-        logger.info('Loading from cache file: ' + str(cache_file))
-        train_features = pickle.load(open(cache_file, 'rb'))
-    else:
-        train_examples = processor.get_train_examples(data_dir)
-        train_features, _ = convert_examples_to_features(
-            train_examples,
-            processor.get_labels(),
-            max_seq_length,
-            tokenizer,
-            two_level_embeddings=two_level_embeddings,
-            pack_seq=pack_seq
-        )
-        logger.info('Saving to cache file: ' + str(cache_file))
-        pickle.dump(train_features, open(cache_file, 'wb'))
-    return train_features
-
-
-def dump_predictions(path, label_map, preds, examples):
-    label_rmap = {label_idx: label for label, label_idx in label_map.items()}
-    predictions = {
-        example.guid: label_rmap[preds[i]] for i, example in enumerate(examples)
+def dump_predictions(path: str, label_list: list, preds: list, examples: list):
+    # label_rmap = {label_idx: label for label, label_idx in label_map.items()}
+    preds = {
+        example.guid: label_list[preds[i]] for i, example in enumerate(examples)
     }
-    with open(path, "w") as writer:
-        json.dump(predictions, writer)
+    json.dump(preds, open(path, 'w'), ensure_ascii=False, indent=2)
 
 
 def load_model(config_file, filename, num_labels):
@@ -381,398 +340,311 @@ def expand_batch(batch, two_level_embeddings):
             token_ids, pos_left, pos_right)
 
 
-def get_loss_of_packed(loss_fn, logits, label_ids, input_mask):
-    loss = None
-    batch_size, input_len, num_labels = logits.size()
-    for b in range(batch_size):
-        for i in range(input_len):
-            if i == 0 or input_mask[b][i] > input_mask[b][i-1]:
-                this_loss = loss_fn(
-                        logits[b][i].view(-1, num_labels),
-                        label_ids[b][i].view(-1))
-                if loss is None:
-                    loss = this_loss
-                else:
-                    loss += this_loss
-    return loss
-
-
-def get_valid_labels_and_logits(label_ids, logits):
-    # Flatten logits and labels for each sequence
-    indices = label_ids != -1  # Index of valid label ids
-    label_ids = label_ids[indices]
-    logits = logits[indices]
-    return label_ids, logits
-
-
-def evaluate(model, tokenizer, loss_fn, args, features, labels, device):
-    '''Return (preds, labels, loss)'''
-    num_labels = len(labels)
-    dataset = gen_tensor_dataset(features, two_level_embeddings=args.two_level_embeddings)
-    sampler = SequentialSampler(dataset)
-    dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.eval_batch_size,)
-    
+def evaluate(
+    model, 
+    dataset, 
+    batch_size: int, 
+    task_name: str, 
+    num_labels: int,
+    device='cuda', 
+    two_level_embeddings=False,
+    ):
     model.eval()
-    loss_fn = torch.nn.CrossEntropyLoss()
-    all_logits = None
-    all_label_ids = None
+    dataloader = DataLoader(dataset, batch_size=batch_size,)
+    loss_fct = torch.nn.CrossEntropyLoss()
+    
+    print('*** Start evaluating ***')
     total_loss = 0
-    num_steps = 0
-    for i, batch in tqdm(enumerate(dataloader), desc="Evaluating",
-                         total=len(dataloader), mininterval=2.0):
+    # Result to gather
+    all_label_ids = []
+    all_logits = []
+
+    for i, batch in tqdm(enumerate(dataloader), desc="Evaluating"):
         batch = tuple(t.to(device) for t in batch)
         (input_ids, input_mask, segment_ids, label_ids,
-         token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
+         token_ids, pos_left, pos_right) = expand_batch(batch, two_level_embeddings)
+
         with torch.no_grad():
             logits = model(input_ids, segment_ids, input_mask,
                            token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                           use_token_embeddings=args.two_level_embeddings,
-                           packed_seq=args.pack_seq)
-
-            if args.pack_seq:
-                # total_loss = get_loss_of_packed(loss_fn, logits, label_ids, 
-                #                                 input_mask)
-                label_ids, logits = get_valid_labels_and_logits(label_ids, logits)
-            total_loss += loss_fn(
+                           use_token_embeddings=two_level_embeddings)
+            total_loss += loss_fct(
                 logits.view(-1, num_labels),
                 label_ids.view(-1),
             ).mean().item()
 
-        num_steps += 1
-        if all_logits is None:
-            all_logits = logits.detach().cpu().numpy()  # (B, n, C)
-            all_label_ids = label_ids.detach().cpu().numpy()
-            # indices = all_label_ids != -1
-            # all_label_ids = all_label_ids[indices]  # (B, # seq. in this batch)
-            # all_logits = all_logits[indices]        
-        else:
-            all_logits = np.append(all_logits, logits.detach().cpu().numpy(), axis=0)
-            all_label_ids = np.append(
-                all_label_ids,
-                label_ids.detach().cpu().numpy(),
-                axis=0,
-            )
-    loss = total_loss / num_steps if num_steps != 0 else -1
+        # Get preds and output ids
+        all_logits += logits.tolist()
+        all_label_ids += label_ids.tolist()
+    print("*** Done evaluating ***", flush=True)
+
     preds = np.argmax(all_logits, axis=1)
-    return preds, all_label_ids, loss
+    metrics = compute_metrics(task_name, preds, all_label_ids)
+    result = {
+        'preds': preds,
+        'loss': total_loss / len(dataloader),
+        'acc': metrics['acc'],
+        'f1': float(metrics['macro_f1']),
+    }
+    return result
+
+
+def get_features(examples, tokenizer, processor, args):
+    features = convert_examples_to_features(
+        examples,
+        label_list=processor.get_labels(),
+        max_seq_length=args.max_seq_length,
+        tokenizer=tokenizer,
+        two_level_embeddings=args.two_level_embeddings,
+        char_by_char=args.tokenize_char_by_char,
+    )
+    # return features[:256]  # TODO: remove on release
+    return features
+
+
+def get_datasets(tokenizer, args, processor):
+    train_examples = processor.get_train_examples(args.train_dir)
+    train_features = get_features(train_examples, tokenizer, processor, args)
+    dev_examples = processor.get_dev_examples(args.dev_dir)
+    dev_features = get_features(dev_examples, tokenizer, processor, args)
+    train_data = gen_tensor_dataset(train_features, two_level_embeddings=args.two_level_embeddings)
+    dev_data = gen_tensor_dataset(dev_features, two_level_embeddings=args.two_level_embeddings)
+    return train_data, dev_data
 
 
 def train(args):
     device = get_device(args)
     n_gpu = torch.cuda.device_count()
-    logger.info(f'Device: {device}')
-    logger.info(f'Num gpus: {n_gpu}')
+    print(f'Device: {device}')
+    print(f'Num gpus: {n_gpu}')
 
-    logger.info('Loading processor and tokenizer...')
+    print('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
     tokenizer = utils.load_tokenizer(args)
 
     # Setup output files
-    output_dir = os.path.join(args.output_dir, str(args.seed))
-    filename_params = os.path.join(output_dir, 'args_train.json')
-    json.dump(vars(args), open(filename_params, 'w'), indent=4)
+    # output_dir = os.path.join(args.output_dir, str(args.seed))
+    output_dir = Path(args.output_dir)
+    json.dump(vars(args), open(output_dir / 'args_train.json', 'w'), indent=2)
 
     # Load data
-    logger.info('Getting training features...')
-    train_features = get_train_features(
-        args.train_dir,
-        args.max_seq_length,
-        # args.train_batch_size,
-        # args.gradient_accumulation_steps,
-        # args.epochs,
-        tokenizer,
-        processor,
-        two_level_embeddings=args.two_level_embeddings,
-        pack_seq=args.pack_seq,
-    )
-    num_train_optimization_steps = int(
-        len(train_features) / args.train_batch_size /
-        args.gradient_accumulation_steps) * args.epochs
+    print('Getting training features...')
+    train_dataset, dev_dataset = get_datasets(tokenizer, args, processor)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+    num_opt_steps = len(train_dataloader) // args.grad_acc_steps * args.epochs
+
 
     utils.set_seed(args.seed)
     # Prepare model
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-    logger.info('Loading model from "{}"...'.format(args.init_checkpoint))
-    model = load_model(args.config_file, args.init_checkpoint, num_labels)
+    print('Loading model from "{}"...'.format(args.init_ckpt))
+    model = load_model(args.config_file, args.init_ckpt, num_labels)
     model.to(device)
 
     # Prepare optimizer
+    print('Preparint optimizer...')
     model, optimizer, scheduler = init_optimizer_and_amp(
         model,
-        args.learning_rate,
+        args.lr,
         args.loss_scale,
-        args.warmup_proportion,
-        num_train_optimization_steps,
-        # args.fp16,
+        args.warmup_prop,
+        num_opt_steps,
         False,
     )
-    loss_fn = torch.nn.CrossEntropyLoss()
-    
-    # Start timer
-    start_time = time.time()
-    last_epoch_time = start_time
-    time_spent_each_epoch = []
+    loss_fct = torch.nn.CrossEntropyLoss()
 
-    logger.info("***** Running training *****")
-    logger.info("Num epochs = %d", args.epochs)
-    logger.info("Num train examples = %d", len(train_features))
-    # logger.info("  Num eval examples = %d", len(eval_examples))
-    logger.info("Train batch size = %d", args.train_batch_size)
-    logger.info("Eval batch size = %d", args.eval_batch_size)
-    logger.info("Num steps = %d", num_train_optimization_steps)
-    logger.info("****************************")
-
-    train_data = gen_tensor_dataset(train_features, two_level_embeddings=args.two_level_embeddings)
-    train_sampler = RandomSampler(train_data)
-    train_dataloader = DataLoader(
-        train_data,
-        sampler=train_sampler,
-        batch_size=args.train_batch_size,
-    )
+    print("*** Start training ***")
+    print(f"Batch size = {args.train_batch_size}")
+    print(f"# examples = {len(train_dataset)}")
+    print(f'# epochs = {args.epochs}')
+    print(f"# steps = {len(train_dataloader)}")
+    print(f'Total opt. steps = {num_opt_steps}')
 
     global_step = 0
-    num_train_steps = 0
-    total_train_loss = 0
-    latency_train = 0.0
-    num_train_examples = 0
-    model.train()
-
-    train_acc_history = []
-    eval_acc_history = []
-    train_loss_history = []
-    eval_loss_history = []
+    train_start_time = time()
+    result_history = []
     
-    # Init file for scores logging (write header row)
-    filename_scores = os.path.join(output_dir, "scores.txt")
-    with open(filename_scores, 'w') as f:
-        f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
-
-    # Save config
-    model_to_save = model.module if hasattr(model, 'module') else model
-    filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
-
     for ep in range(args.epochs):
-        # Train
+        print(f'*** Start training epoch {ep} ***', flush=True)
         model.train()
-        total_train_loss, num_train_steps = 0, 0
-        desc = "Training (epoch " + str(ep) + ")"
-        for step, batch in tqdm(enumerate(train_dataloader), 
-                                total=len(train_dataloader), desc=desc, 
-                                mininterval=2.0):
+        total_train_loss = 0
+        for step, batch in enumerate(train_dataloader):
+            # print(step, flush=True)
             batch = tuple(t.to(device) for t in batch)
             (input_ids, input_mask, segment_ids, label_ids,
              token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
-
+            
+            # Forward pass
             logits = model(input_ids, segment_ids, input_mask,
                             token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                            use_token_embeddings=args.two_level_embeddings,
-                            packed_seq=args.pack_seq)
-            if args.pack_seq:
-                # loss = get_loss_of_packed(loss_fn, logits, label_ids, input_mask)
-                
-                label_ids, logits = get_valid_labels_and_logits(label_ids, logits)
-            # else:
-            loss = loss_fn(
+                            use_token_embeddings=args.two_level_embeddings)
+            loss = loss_fct(
                 logits.view(-1, num_labels),
                 label_ids.view(-1),
             )
-        
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
-            if args.gradient_accumulation_steps > 1:
-                loss = loss / args.gradient_accumulation_steps
-
+                
+            # Backward pass
+            loss /= args.grad_acc_steps
             loss.backward()
-
-            total_train_loss += loss.item()
-            num_train_examples += input_ids.size(0)
-            num_train_steps += 1
-            if (step + 1) % args.gradient_accumulation_steps == 0:
+            if (step + 1) % args.grad_acc_steps == 0:
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
-                global_step += 1
+                
+            total_train_loss += loss.item()
+            global_step += 1
+                
+            # Log
+            if step % args.log_interval == 0:
+                print(f'step: {global_step / len(train_dataloader):.2f}, '
+                      f'loss: {total_train_loss / (step + 1)} '
+                      f'lr: {scheduler.get_lr()[0]} '
+                      f'time_elapsed: {time() - train_start_time}',
+                      flush=True)
         
-        train_loss = total_train_loss / (num_train_steps + 1e-10)
-        train_loss_history.append(train_loss)
+        train_loss = total_train_loss / len(train_dataloader)
 
         # Evaluation
-        labels = processor.get_labels()
-        eval_examples = processor.get_dev_examples(args.dev_dir)
-        eval_features, label_map = convert_examples_to_features(
-            eval_examples, labels, args.max_seq_length, tokenizer,
-            two_level_embeddings=args.two_level_embeddings,
-            pack_seq=args.pack_seq)
-            
-        logger.info("***** Running evaluation *****")
-        logger.info("  Num examples = %d", len(eval_examples))
-
-        eval_result = evaluate(model, tokenizer, loss_fn, args,
-                                eval_features, labels, device)
-        preds, all_label_ids, eval_loss = eval_result
-
-        # Log and update results
-        eval_acc = compute_metrics(args.task_name, preds, all_label_ids)['acc']
-        
-        # Log
         if is_main_process():
-            logger.info("***** Results *****")
-            logger.info(f'train loss: {train_loss}')
-            logger.info(f'eval loss:  {eval_loss}')
-            logger.info(f'eval acc:   {eval_acc}')
-            logger.info("*******************")
+            eval_result = evaluate(
+                model,
+                dev_dataset,
+                args.eval_batch_size,
+                task_name=args.task_name,
+                num_labels=num_labels,
+                two_level_embeddings=args.two_level_embeddings,
+            )
 
-        eval_loss_history.append(eval_loss)
-        eval_acc_history.append(eval_acc)
+            epoch_result = {
+                'epoch': ep,
+                'train_loss': train_loss,
+                'dev_loss': eval_result['loss'],
+                'dev_acc': eval_result['acc'],
+                'dev_f1': eval_result['f1'],
+            }
+            result_history.append(epoch_result)
+            # Log to stdout and file
+            print("*** Results ***")
+            print(epoch_result)
+            json.dump(result_history, open(output_dir / 'scores.json', 'w'), 
+                      indent=2, ensure_ascii=False)
 
-        # Log scores to file
-        with open(filename_scores, 'w') as f:
-            f.write('\t'.join(['epoch', 'train_loss', 'dev_loss', 'dev_acc']) + '\n')
-            for i in range(ep + 1):
-                train_loss = train_loss_history[i]
-                eval_loss = eval_loss_history[i]
-                eval_acc = eval_acc_history[i]
-                f.write(f"{i}\t{train_loss}\t{eval_loss}\t{eval_acc}\n")
+            # Save checkpoint
+            if not args.skip_checkpoint:
+                # model_to_save = model.module if hasattr(model, 'module') else model
+                ckpt_dir = output_dir / f'ckpt-{ep}'
+                ckpt_dir.mkdir(exist_ok=True, parents=True)
+                ckpt_file = ckpt_dir / f'model.pt'
+                print(f'Saving model to {ckpt_file}')
+                torch.save({"model": model.state_dict()}, ckpt_file)
+                json.dump(
+                    {k: eval_result[k] for k in ['acc', 'loss', 'f1']}, 
+                    open(ckpt_dir / 'result.json', 'w'), 
+                    indent=2, ensure_ascii=False)
+
+    print('*** Training finished ***')
+    print(f'time_elapsed: {time() - train_start_time}')
 
 
-        # Save model if it's best on dev set
-        if args.do_eval and is_main_process() and not args.skip_checkpoint:
-            if len(eval_acc_history) == 0 or eval_acc_history[-1] == max(eval_acc_history):
-                model_to_save = model.module if hasattr(model, 'module') else model
-                model_dir = os.path.join(output_dir, 'models')
-                os.makedirs(model_dir, exist_ok=True)
-                # model_filename = os.path.join(model_dir, modeling.WEIGHTS_NAME + '_' + str(ep))
-                model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
-                torch.save(
-                    {"model": model_to_save.state_dict()},
-                    model_filename,
-                )
-                # copyfile(model_filename, best_model_filename)
-                logger.info("New best model saved")
-
-        # Log time to file
-        time_logfile = os.path.join(output_dir, 'time_log.txt')
-        this_elapsed = time.time() - last_epoch_time
-        time_spent_each_epoch.append(this_elapsed)
-        time_stats = {
-            'start_time': start_time,
-            'epochs': time_spent_each_epoch,
-        }
-        json.dump(time_stats, open(time_logfile, 'w', encoding='utf8'))
-        last_epoch_time = time.time()
-
-    logger.info('Training finished')
+def get_best_ckpt(output_dir: Path) -> Path:
+    min_loss = float('inf')
+    best_ckpt_dir = None
+    for ckpt_dir in output_dir.glob('ckpt-*'):
+        if not ckpt_dir.is_dir(): continue
+        loss = json.load(open(ckpt_dir / 'result.json'))['loss']
+        if loss < min_loss:
+            min_loss = loss
+            best_ckpt_dir = ckpt_dir
     
-    # Log time to file
-    stop_time = time.time()
-    elapsed = stop_time - start_time
-    time_stats = {
-        'start_time': str(start_time),
-        'epochs': time_spent_each_epoch,
-        'elapsed': str(elapsed),
-    }
-    time_logfile = os.path.join(output_dir, 'time_log.txt')
-    json.dump(time_stats, open(time_logfile, 'w', encoding='utf8'))
+    return best_ckpt_dir / 'model.pt'
 
 
 def test(args):
     # Setup output files
-    output_dir = os.path.join(args.output_dir, str(args.seed))
+    # output_dir = os.path.join(args.output_dir, str(args.seed))
+    output_dir = Path(args.output_dir, args.test_name)
+    output_dir.mkdir(parents=True, exist_ok=True)
     device = get_device(args)
     utils.set_seed(args.seed)
 
     # Tokenizer and processor
-    logger.info('Loading processor and tokenizer...')
+    print('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
-    labels = processor.get_labels()
     num_labels = len(processor.get_labels())
     tokenizer = utils.load_tokenizer(args)
-
-    # Load test data
-    logger.info('Loading test data from "{}"'.format(args.test_dir))
-    examples = processor.get_test_examples(args.test_dir)
-    features, label_map = convert_examples_to_features(
-        examples, labels, args.max_seq_length, tokenizer,
-        two_level_embeddings=args.two_level_embeddings, pack_seq=args.pack_seq)
 
     # Load best model
     if args.test_model:
         best_model_filename = args.test_model
     else:
-        best_model_filename = os.path.join(output_dir, FILENAME_BEST_MODEL)
-    logger.info('Loading model from "{}"...'.format(best_model_filename))
+        best_model_filename = get_best_ckpt(output_dir.parent)
+    print('Loading model from "{}"...'.format(best_model_filename))
     model = load_model(args.config_file, best_model_filename, num_labels)
+    print('Loaded model from "{}"'.format(best_model_filename))
     model.to(device)
+    
+    # Load test data
+    print('Loading test data from "{}"'.format(args.test_dir))
+    examples = processor.get_test_examples(args.test_dir)
+    features = get_features(examples, tokenizer, processor, args)
+    examples = examples[:len(features)]
+    dataset = gen_tensor_dataset(features, two_level_embeddings=args.two_level_embeddings)
 
-    # Test
-    logger.info("***** Running Test *****")
-    logger.info("Num examples = %d", len(examples))
-    logger.info("Batch size   = %d", args.eval_batch_size)
-    logger.info("************************")
-    loss_fn = torch.nn.CrossEntropyLoss()
+    result = evaluate(
+        model,
+        dataset,
+        batch_size=args.eval_batch_size,
+        task_name=args.task_name,
+        num_labels=num_labels,
+        two_level_embeddings=args.two_level_embeddings)
 
-    preds, all_label_ids, loss = evaluate(model, tokenizer, loss_fn, args, 
-                                          features, labels, device)
+    # Save result
+    json.dump(result['preds'].tolist(), open(output_dir / 'preds.json', 'w'), indent=2, ensure_ascii=False)
+    del result['preds']
+    json.dump(result, open(output_dir / 'result.json', 'w'), ensure_ascii=False)
+    print(result)
 
-    # Save predictions
-    dump_predictions(
-        os.path.join(output_dir, 'predictions.json'),
-        label_map,
-        preds,
-        examples,
-    )
-    acc = compute_metrics(args.task_name, preds, all_label_ids)['acc']
 
-    # Save test result to file
-    result_file = os.path.join(output_dir, FILENAME_TEST_RESULT)
-    with open(result_file, 'w') as f:
-        f.write(f'test_loss\ttest_acc\n')
-        f.write(f'{loss}\t{acc}\n')
-
-    # Log to console
-    if is_main_process():
-        logger.info("***** Results *****")
-        logger.info(f'Test loss: {loss}')
-        logger.info(f'Test acc:  {acc}')
-        logger.info("*******************")
-
-    logger.info('Test finished')
+    print('Test finished')
 
 
 def main(args):
-    logger.info("Arguments:")
-    logger.info(json.dumps(vars(args), indent=4))
+    print("Arguments:")
+    print(json.dumps(vars(args), indent=4), flush=True)
 
     # Setup output files
-    output_dir = os.path.join(args.output_dir, str(args.seed))
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
     filename_params = os.path.join(output_dir, consts.FILENAME_PARAMS)
     json.dump(vars(args), open(filename_params, 'w'), indent=4)
 
 
     # Sanity check on arguments
-    if not args.do_train and not args.do_eval and not args.do_test:
-        raise ValueError("At least one of `do_train`, `do_eval` or `do_test` must be True.")
-    if args.gradient_accumulation_steps < 1:
-        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, "
+    if not args.do_train and not args.do_test:
+        raise ValueError("At least one of `do_train` or `do_test` must be True.")
+    if args.grad_acc_steps < 1:
+        raise ValueError("Invalid grad_acc_steps parameter: {}, "
                          "should be >= 1".format(
-                             args.gradient_accumulation_steps))
-    if args.gradient_accumulation_steps > args.train_batch_size:
-        raise ValueError("gradient_accumulation_steps ({}) cannot be larger "
-                         "train_batch_size ({}) - there cannot be a fraction "
-                         "of one sample.".format(
-                             args.gradient_accumulation_steps,
-                             args.train_batch_size,
-                         ))
-    args.train_batch_size = (args.train_batch_size //
-                             args.gradient_accumulation_steps)
+                             args.grad_acc_steps))
+    # if args.grad_acc_steps > args.train_batch_size:
+    #     raise ValueError("grad_acc_steps ({}) cannot be larger "
+    #                      "train_batch_size ({}) - there cannot be a fraction "
+    #                      "of one sample.".format(
+    #                          args.grad_acc_steps,
+    #                          args.train_batch_size,
+    #                      ))
+    # args.train_batch_size = (args.train_batch_size //
+                            #  args.grad_acc_steps)
 
     # Set seed
     if args.do_train:
         train(args)
     if args.do_test:
         test(args)
-    print('DONE')
+    print('DONE', flush=True)
 
 
 if __name__ == "__main__":

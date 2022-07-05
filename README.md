@@ -16,6 +16,21 @@ You can run one of the following python code to do finetuning depending on which
 - `run_ner.py`: CLUENER
 - `run_{cmrc, drcd, c3}.py`: CMRC, DRCD or C3
 
+Also note that different tokenization methods require passing different argument values for: `tokenizer_type`, `vocab_file`, `vocab_model_file`. 
+
+Values of `tokenizer_type`:
+
+Tokenization method | Value of `tokenizer_type`
+------------------- | -------------------------
+Char                | BertZh
+Pinyin              | CommonZh 
+Pinyin-NoIndex      | CommonZhNoIndex
+Byte                | Byte
+RandomIndex         | RandomIndex
+PinyinConcatWubi    | PinyinConcatWubi
+Pinyin-Shuffle      | Shuffled
+
+
 For example, for finetuning on TNews using pinyin tokenizer:
 
 ```bash
@@ -50,3 +65,22 @@ python3 run_cmrc.py \
   --epochs=6
 ```
 
+## Testing
+
+Generally, just don't pass `--do_train` and `--do_eval` to the execution scripts above.
+
+Example of testing on TNews using Pinyin-NoIndex tokenizer:
+
+```bash
+python3 run_glue.py \
+  --task_name=tnews \
+  --data_dir datasets/tnews/split \
+  --do_test \
+  --init_checkpoint=checkpoints/checkpoints_pinyin_no_index/ckpt_8804.pt \
+  --output_dir=logs/pinyin_tnews \
+  --tokenizer_type=CommonZh \
+  --vocab_file=tokenizers/pinyin_zh_22675.vocab \
+  --vocab_model_file=tokenizers/pinyin_zh_22675.model \
+  --config_file=configs/bert_config_vocab22675.json \
+  --epochs=6
+```

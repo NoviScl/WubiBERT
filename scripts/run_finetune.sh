@@ -111,4 +111,4 @@ fi
 
 LOGFILE=$out_dir/$seed/logfile
 
-$CMD |& tee $LOGFILE
+$CMD | tee $LOGFILE

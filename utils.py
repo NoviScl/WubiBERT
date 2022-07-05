@@ -105,6 +105,9 @@ def output_dir_to_tokenizer_name(output_dir):
         'cws_zhuyin',
 
         # Ordinary
+        'rbt3',
+        'pypinyin',
+        'pypinyin_nosep',
         'cangjie',
         'stroke',
         'pinyin',

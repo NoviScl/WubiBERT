@@ -171,8 +171,8 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     #         null_score_diff_threshold=null_score_diff_threshold,
     #     )
     
-    print("Writing predictions to: %s" % (output_prediction_file))
-    print("Writing nbest to: %s" % (output_nbest_file))
+    # print("Writing predictions to: %s" % (output_prediction_file))
+    # print("Writing nbest to: %s" % (output_nbest_file))
 
     example_index_to_features = collections.defaultdict(list)
     for feature in all_features:
@@ -190,7 +190,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     all_nbest_json = collections.OrderedDict()
     scores_diff_json = collections.OrderedDict()
 
-    for (example_index, example) in enumerate(tqdm(all_examples)):
+    for (example_index, example) in enumerate(all_examples):
         features = example_index_to_features[example_index]
         prelim_predictions = []
         # keep track of the minimum score of null start+end of position 0

@@ -583,136 +583,6 @@ class Sst2Processor(DataProcessor):
         return examples
 
 
-def _bin_packing_first_fit(items, cap, smallest_first=False):
-    '''Do bin packing algorithm on given items and capacity.
-    items: [int]
-    cap: int
-    
-    Return: [[length of bin, [index of item 1, index of item 2, ...]], 
-             ...]'''
-    indices = [i for i in range(len(items))]
-    if smallest_first:
-        indices = sorted(indices, key=lambda x: items[x])
-    bins = []
-    for i in indices:
-        for b in bins:                  # Linear search for first fit
-            if items[i] + b[0] <= cap:  # Fits in bin
-                # Add to bin
-                b[0] += items[i]
-                b[1].append(i)
-                break 
-        else:
-            # New bin
-            bins.append([items[i], [i]])
-    return bins
-
-
-def _pack_sequences(all_input_ids, max_seq_length):
-    '''
-    Return indices of the packed sequences:
-    [[length of packed seq., list of indices that are packed], ...]
-    '''
-    def lower_bound(target, indices):  # Find first element that is <= `target`
-        lo, hi = 0, len(indices)
-        while lo < hi:
-            m = (lo + hi) // 2
-            if indices[m][0] > target:
-                lo = m + 1
-            else:
-                hi = m
-        return lo
-    # Pack sequences into # [[len_x, [x]], ...], where the first element is
-    # the length of the sequence, and the second element the list of indices
-    # that are packed into that sequence.
-    indices = list(range(len(all_input_ids)))
-    indices = sorted(indices, key=lambda x: len(all_input_ids[x]), reverse=True)
-    indices = [[len(all_input_ids[i]), [i]] for i in indices]
-    # Merge until saturated
-    while len(indices) > 1 and indices[-1][0] + indices[-2][0] <= max_seq_length:
-        target = max_seq_length - indices[-1][0]
-        merge_target = lower_bound(target, indices)
-        if merge_target == len(indices) - 1:
-            break  # No other sequence could fit this smallest sequence
-        # Merge and pop
-        indices[merge_target][0] += indices[-1][0]
-        indices[merge_target][1] += indices[-1][1]
-        indices.pop()
-    # print('Number of sequences:', len(indices))
-    # for x in indices[-10:]:
-    #     print(x)
-    # exit()
-    return indices
-
-
-def _pack_sequences_ff(all_input_ids, max_seq_length, smallest_first=False):
-    lens = [len(x) for x in all_input_ids]
-    bins = _bin_packing_first_fit(lens, max_seq_length, smallest_first)
-    return bins
-
-
-def _gen_packed_features(all_input_ids, all_segment_ids, all_label_ids,
-                         max_seq_length):
-    features = []
-    # packed = _pack_sequences(all_input_ids, max_seq_length)
-    packed = _pack_sequences_ff(all_input_ids, max_seq_length)
-    packed = [x[1] for x in packed]  # Each item is a list of indices
-    for p in packed:
-        input_ids = []
-        input_mask = []
-        segment_ids = []
-        label_ids = []  # Label ids should be n-dim vector
-        for i, idx in enumerate(p):
-            n = len(all_input_ids[idx])
-            input_ids += all_input_ids[idx]
-            segment_ids += all_segment_ids[idx]
-            label_ids += [all_label_ids[idx]] + [-1] * (n - 1)
-            input_mask += [i + 1] * n
-        padding = [0] * (max_seq_length - len(input_ids))
-        input_ids += padding
-        input_mask += padding
-        segment_ids += padding
-        label_ids += [-1] * (max_seq_length - len(label_ids))
-
-        assert len(input_ids) == max_seq_length
-        assert len(input_mask) == max_seq_length
-        assert len(segment_ids) == max_seq_length
-        assert len(label_ids) == max_seq_length
-        features.append(
-            InputFeatures(input_ids=input_ids,
-                          input_mask=input_mask,
-                          segment_ids=segment_ids,
-                          label_id=label_ids)
-            )
-    return features
-
-
-def _gen_features(all_input_ids, all_segment_ids, all_label_ids, max_seq_length):
-    features = []
-    for input_ids, segment_ids, label_id in zip(all_input_ids, all_segment_ids, 
-                                                all_label_ids):
-        # The mask has 1 for real tokens and 0 for padding tokens. Only real
-        # tokens are attended to.
-        input_mask = [1] * len(input_ids)
-
-        # Zero-pad up to the sequence length.
-        padding = [0] * (max_seq_length - len(input_ids))
-        input_ids += padding
-        input_mask += padding
-        segment_ids += padding
-
-        assert len(input_ids) == max_seq_length
-        assert len(input_mask) == max_seq_length
-        assert len(segment_ids) == max_seq_length
-
-        features.append(
-            InputFeatures(input_ids=input_ids,
-                          input_mask=input_mask,
-                          segment_ids=segment_ids,
-                          label_id=label_id)
-            )
-    return features
-    
-
 def convert_examples_to_features_two_level_embeddings(
     examples, label_list, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
@@ -864,8 +734,8 @@ def convert_examples_to_features_two_level_embeddings(
 
 
 def convert_examples_to_features(examples, label_list, max_seq_length,
-                                 tokenizer, two_level_embeddings: bool,
-                                 pack_seq: bool):
+                                 tokenizer, two_level_embeddings,
+                                 char_by_char):
     """Loads a data file into a list of `InputBatch`s."""
 
     if two_level_embeddings:
@@ -874,19 +744,24 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    all_input_ids = []
-    all_segment_ids = []
-    all_label_ids = []
+    features = []
     for (ex_index, example) in enumerate(examples):
         # in OCNLI, examples with label = '-' should be skipped
         # or set to 'neutral'?
         if example.label == '-':
             example.label = 'neutral'
-        tokens_a = tokenizer.tokenize(example.text_a)
+            
+        if char_by_char:
+            tokens_a = sum([[c] for c in example.text_a], [])
+        else:
+            tokens_a = tokenizer.tokenize(example.text_a)
 
         tokens_b = None
         if example.text_b:
-            tokens_b = tokenizer.tokenize(example.text_b)
+            if char_by_char:
+                tokens_b = sum([[c] for c in example.text_b], [])
+            else:
+                tokens_b = tokenizer.tokenize(example.text_b)
             # Modifies `tokens_a` and `tokens_b` in place so that the total
             # length is less than the specified length.
             # Account for [CLS], [SEP], [SEP] with "- 3"
@@ -903,17 +778,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         # (b) For single sequences:
         #  tokens:   [CLS] the dog is hairy . [SEP]
         #  type_ids: 0   0   0   0  0     0 0
-        #
-        # Where "type_ids" are used to indicate whether this is the first
-        # sequence or the second sequence. The embedding vectors for `type=0` and
-        # `type=1` were learned during pre-training and are added to the wordpiece
-        # embedding vector (and position vector). This is not *strictly* necessary
-        # since the [SEP] token unambigiously separates the sequences, but it makes
-        # it easier for the model to learn the concept of sequences.
-        #
-        # For classification tasks, the first vector (corresponding to [CLS]) is
-        # used as as the "sentence vector". Note that this only makes sense because
-        # the entire model is fine-tuned.
 
         tokens = ["[CLS]"] + tokens_a + ["[SEP]"]
         segment_ids = [0] * len(tokens)
@@ -923,19 +787,31 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             segment_ids += [1] * (len(tokens_b) + 1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        all_input_ids.append(input_ids)
-        all_segment_ids.append(segment_ids)
-        all_label_ids.append(label_map[example.label])
-        
-    if pack_seq:
-        features = _gen_packed_features(all_input_ids, all_segment_ids,
-                                        all_label_ids, max_seq_length)
-    else:
-        # Convert all_input_ids and all_label_ids in features
-        features = _gen_features(all_input_ids, all_segment_ids, all_label_ids,
-                                 max_seq_length)
-    
-    return features, label_map
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        input_mask = [1] * len(input_ids)
+
+        # Zero-pad up to the sequence length.
+        padding = [0] * (max_seq_length - len(input_ids))
+        input_ids += padding
+        input_mask += padding
+        segment_ids += padding
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+
+        label_id = label_map[example.label]
+
+        features.append(
+            InputFeatures(input_ids=input_ids,
+                          input_mask=input_mask,
+                          segment_ids=segment_ids,
+                          label_id=label_id,
+                          )
+            )
+    return features
 
 
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
