@@ -1,59 +1,65 @@
 # coding=utf-8
 
 import argparse
+from pathlib import Path
 import collections
 import json
 import os
 import random
-import logging
+from time import time
+# import logging
 from shutil import copyfile
 
-from tqdm import tqdm, trange
+from tqdm import tqdm
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
-import consts
 import modeling
 from tokenization import (
     ALL_TOKENIZERS,
-    BertTokenizer, 
-    ConcatSepTokenizer, 
-    WubiZhTokenizer, 
-    RawZhTokenizer, 
-    BertZhTokenizer
 )
-from optimization import BertAdam, warmup_linear, get_optimizer
-from utils import (json_load_by_line, json_save_by_line, mkdir, get_freer_gpu, 
-                   get_device, output_dir_to_tokenizer_name, load_tokenizer)
+from optimization import get_optimizer
+from utils import (json_load_by_line, json_save_by_line,
+                   get_device, output_dir_to_tokenizer_name)
 
 from mrc.preprocess.cmrc2018_evaluate import get_eval
-from mrc.tools import official_tokenization, utils
 from mrc.preprocess.cmrc2018_output import write_predictions
 from mrc.preprocess.cmrc2018_preprocess import (
     read_cmrc_examples,
     convert_examples_to_features,
 )
 
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-    datefmt='%m/%d/%Y %H:%M:%S',
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(
+#     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+#     datefmt='%m/%d/%Y %H:%M:%S',
+#     level=logging.INFO,
+# )
+# logger = logging.getLogger(__name__)
 
 
-def evaluate(model, args, file_data, examples, features, device, epoch, output_dir):
-    logger.info("***** Eval *****")
+def evaluate(
+    model, 
+    args, 
+    file_data: Path, 
+    examples: list, 
+    features: list, 
+    device: str, 
+    epoch: int, 
+    output_dir: Path,
+    ):
+    print("*** Evaluation ***", flush=True)
     RawResult = collections.namedtuple(
         "RawResult",
         ["unique_id", "start_logits", "end_logits"])
-    dir_preds = os.path.join(output_dir, 'predictions')
-    os.makedirs(dir_preds, exist_ok=True)
-    file_preds = os.path.join(dir_preds, 'predictions_' + str(epoch) + '.json')
-    output_nbest_file = file_preds.replace('predictions_', 'nbest_')
+    # dir_preds = Path(output_dir, 'predictions')
+    # os.makedirs(dir_preds, exist_ok=True)
+    output_dir.mkdir(exist_ok=True, parents=True)
+    file_preds = output_dir / 'preds.json'
+    # output_nbest_file = file_preds.replace('predictions_', 'nbest_')
+    file_nbest = output_dir / 'nbest.json'
     
-    all_examples_index = torch.arange(len(features), dtype=torch.long)
+    # all_examples_index = torch.arange(len(features), dtype=torch.long)
     dataset = features_to_dataset(features, is_training=False,
                                   two_level_embeddings=args.two_level_embeddings,
                                   avg_char_tokens=args.avg_char_tokens)
@@ -61,8 +67,8 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
 
     model.eval()
     all_results = []
-    logger.info("Start evaluating")
-    for batch in tqdm(dataloader, desc="Evaluating", mininterval=5.0):
+    print("*** Start evaluating ***", flush=True)
+    for batch in dataloader:
         batch = tuple(t.to(device) for t in batch)
         tensors = expand_batch(batch, is_training=False,
                                two_level_embeddings=args.two_level_embeddings,
@@ -86,7 +92,7 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
             all_results.append(RawResult(unique_id=unique_id,
                                          start_logits=start_logits,
                                          end_logits=end_logits))
-    logger.info(f'Writing predictions to "{args.n_best}" and "{file_preds}"')
+    print(f'Writing predictions to {file_preds} and {file_nbest}', flush=True)
     write_predictions(
         examples, 
         features, 
@@ -95,49 +101,56 @@ def evaluate(model, args, file_data, examples, features, device, epoch, output_d
         max_answer_length=args.max_ans_length,
         do_lower_case=True, 
         output_prediction_file=file_preds,
-        output_nbest_file=output_nbest_file,
-        two_level_embeddings=False)
+        output_nbest_file=file_nbest,
+        two_level_embeddings=False,
+    )
 
-    file_truth = os.path.join(args.data_dir, file_data)
-    res = get_eval(file_truth, file_preds)
+    # file_truth = os.path.join(args.data_dir, file_data)
+    res = get_eval(file_data, file_preds)
+    result_file = output_dir / 'result.json'
+    json.dump(res, open(result_file, 'w'))
+    print('*** Evaluation finished ***', flush=True)
     model.train()
     return res['em'], res['f1']
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    p = argparse.ArgumentParser()
 
     # Hyperparameters
-    parser.add_argument('--epochs', type=int, default=6)
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
-    parser.add_argument('--lr', type=float, default=3e-5)
-    parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--clip_norm', type=float, default=1.0)
-    parser.add_argument('--warmup_rate', type=float, default=0.05)
-    parser.add_argument("--schedule", default='warmup_linear', type=str, help='schedule')
-    parser.add_argument("--weight_decay_rate", default=0.01, type=float, help='weight_decay_rate')
-    parser.add_argument('--max_ans_length', type=int, default=50)
-    parser.add_argument('--n_best', type=int, default=20)
-    parser.add_argument('--max_seq_length', type=int, default=512)
-    parser.add_argument('--seed', type=int, default=0)
+    p.add_argument('--epochs', type=int, default=6)
+    p.add_argument('--batch_size', type=int, default=32)
+    p.add_argument('--grad_acc_steps', type=int, default=2)
+    p.add_argument('--lr', type=float, default=3e-5)
+    p.add_argument('--dropout', type=float, default=0.1)
+    p.add_argument('--clip_norm', type=float, default=1.0)
+    p.add_argument('--warmup_rate', type=float, default=0.05)
+    p.add_argument("--schedule", default='warmup_linear', type=str, help='schedule')
+    p.add_argument("--weight_decay_rate", default=0.01, type=float, help='weight_decay_rate')
+    p.add_argument('--max_ans_length', type=int, default=50)
+    p.add_argument('--n_best', type=int, default=20)
+    p.add_argument('--max_seq_length', type=int, default=512)
+    p.add_argument('--seed', type=int, default=0)
 
     # Other arguments
-    parser.add_argument('--data_dir', type=str, required=True)
-    parser.add_argument('--init_checkpoint', type=str, required=True)
-    parser.add_argument('--config_file', type=str, required=True)
-    parser.add_argument('--tokenizer_type', type=str, required=True)
-    parser.add_argument('--vocab_file', type=str, required=True)
-    parser.add_argument('--vocab_model_file', type=str, required=True)
-    parser.add_argument('--cws_vocab_file', type=str, default=None)
-    parser.add_argument('--output_dir', type=str, default='logs/temp')
-    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
-    parser.add_argument('--do_test', action='store_true', help='Whether to test.')
-    parser.add_argument('--two_level_embeddings', action='store_true')
-    parser.add_argument('--avg_char_tokens', action='store_true')
-    parser.add_argument('--debug', action='store_true')
+    p.add_argument('--data_dir', type=str, required=True)
+    p.add_argument('--init_checkpoint')
+    p.add_argument('--config_file', type=str, required=True)
+    p.add_argument('--tokenizer_type', type=str, required=True)
+    p.add_argument('--vocab_file', type=str, required=True)
+    p.add_argument('--vocab_model_file', type=str, required=True)
+    p.add_argument('--cws_vocab_file', type=str, default=None)
+    p.add_argument('--output_dir', type=str, default='logs/temp')
+    p.add_argument("--do_train", action='store_true', help="Whether to run training.")
+    p.add_argument('--do_test', action='store_true', help='Whether to test.')
+    p.add_argument('--two_level_embeddings', action='store_true')
+    p.add_argument('--avg_char_tokens', action='store_true')
+    p.add_argument('--debug', action='store_true')
+    p.add_argument('--test_name', default='test_clean')
+    p.add_argument('--tokenizer_name', default='XXX')
+    p.add_argument('--test_ckpt')
 
-    return parser.parse_args()
+    return p.parse_args()
 
 
 def features_to_dataset(features: list, is_training: bool, two_level_embeddings, 
@@ -255,8 +268,13 @@ def expand_batch(batch, is_training, two_level_embeddings, avg_char_tokens) -> t
                 token_ids, pos_left, pos_right)
 
 
-def get_filename_examples_and_features(data_type: str, args, tokenizer_name: str,
-                                       vocab_size: int):
+def get_filename_examples_and_features(
+    data_type: str,
+    data_dir: str,
+    args, 
+    tokenizer_name: str,
+    vocab_size: int=22680,
+    ) -> tuple:
     '''
     Return:
         example_file: str,
@@ -270,8 +288,8 @@ def get_filename_examples_and_features(data_type: str, args, tokenizer_name: str
         suffix = '_{}_{}_{}_chartokens'.format(str(args.max_seq_length), tokenizer_name, str(vocab_size))
     else:
         suffix = '_{}_{}_{}'.format(str(args.max_seq_length), tokenizer_name, str(vocab_size))
-    file_examples = os.path.join(args.data_dir, data_type + suffix_ex)
-    file_features = os.path.join(args.data_dir, data_type + '_features' + suffix + '.json')
+    file_examples = Path(data_dir, data_type + suffix_ex)
+    file_features = Path(data_dir, data_type + '_features' + suffix + '.json')
     return file_examples, file_features
 
 
@@ -282,8 +300,8 @@ def gen_examples_and_features(
     is_training,
     tokenizer,
     max_seq_length,
-    max_query_length=64,
-    doc_stride=128,
+    # max_query_length=64,
+    # doc_stride=128,
     two_level_embeddings=False,
     avg_char_tokens=False,
     ):
@@ -294,47 +312,47 @@ def gen_examples_and_features(
     '''
 
     use_example_cache = True
-    use_feature_cache = False
+    use_feature_cache = True
 
     examples, features = None, None
     # Examples
     if use_example_cache and os.path.exists(file_examples):
-        logger.info('Found example file, loading...')
+        print('Found example file, loading...')
         examples = json_load_by_line(file_examples)
-        logger.info(f'Loaded {len(examples)} examples')
+        print(f'Loaded {len(examples)} examples')
     else:
-        logger.info('Example file not found, generating...')
+        print('Example file not found, generating...')
         examples, mismatch = read_cmrc_examples(file_data, is_training)
-        logger.info(f'num examples: {len(examples)}')
-        logger.info(f'mismatch: {mismatch}')
-        logger.info(f'Generated {len(examples)} examples')
+        print(f'num examples: {len(examples)}')
+        print(f'mismatch: {mismatch}')
+        print(f'Generated {len(examples)} examples')
 
-        logger.info(f'Saving to "{file_examples}"...')
+        print(f'Saving to "{file_examples}"...')
         json_save_by_line(examples, file_examples)
-        logger.info(f'Saved {len(examples)} examples')
+        print(f'Saved {len(examples)} examples')
         # Somehow, just saving will result in all empty evaluation XD
-        logger.info(f'Loading from "{file_examples}"...')
+        print(f'Loading from "{file_examples}"...')
         examples = json_load_by_line(file_examples)
-        logger.info(f'Loaded {len(examples)} examples')
+        print(f'Loaded {len(examples)} examples', flush=True)
 
     # Load or gen features
     if use_feature_cache and os.path.exists(file_features):
-        logger.info('Found feature file, loading...')
+        print('Found feature file, loading...')
         features = json_load_by_line(file_features)
-        logger.info(f'Loaded {len(features)} features')
+        print(f'Loaded {len(features)} features')
     else:
-        logger.info('Feature file not found, generating...')
+        print('Feature file not found, generating...')
         features = convert_examples_to_features(
             examples, tokenizer, max_seq_length=max_seq_length,
             two_level_embeddings=two_level_embeddings,
             avg_char_tokens=avg_char_tokens)
-        logger.info(f'Generated {len(features)} features')
-        logger.info(f'Saving to "{file_features}"...')
+        print(f'Generated {len(features)} features')
+        print(f'Saving to "{file_features}"...')
         json_save_by_line(features, file_features)
-        logger.info(f'Saved {len(features)} features')
-        logger.info('Found feature file, loading...')
+        print(f'Saved {len(features)} features')
+        print('Found feature file, loading...')
         features = json_load_by_line(file_features)
-        logger.info(f'Loaded {len(features)} features')
+        print(f'Loaded {len(features)} features', flush=True)
 
     return examples, features
 
@@ -347,60 +365,85 @@ def set_seed(seed, n_gpu):
         torch.cuda.manual_seed_all(seed)
 
 
+def load_model(config_file: str, init_ckpt: str):
+    '''Load model from a checkpoint'''
+    print(f'Loading model from checkpoint "{init_ckpt}"')
+    config = modeling.BertConfig.from_json_file(config_file)
+    if config.vocab_size % 8 != 0:
+        config.vocab_size += 8 - (config.vocab_size % 8)
+    model = modeling.BertForQuestionAnswering(config)
+    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+    state_dict = torch.load(init_ckpt, map_location='cpu')
+    model.load_state_dict(state_dict['model'], strict=False)
+    return model
+
+
+def load_tokenizer(tok_type: str, vocab_file: str, vocab_model_file: str):
+    print('Loading tokenizer...')
+    return ALL_TOKENIZERS[tok_type](vocab_file, vocab_model_file)
+    print('Loaded tokenizer')
+
+
+def get_best_ckpt(output_dir: Path) -> Path:
+    max_acc = float('-inf')
+    best_ckpt = None
+    for ckpt_dir in output_dir.glob('ckpt-*'):
+        if not ckpt_dir.is_dir(): continue
+        result_file = ckpt_dir / 'result.json'
+        result = json.load(open(result_file))
+        acc = result['em']
+        if acc > max_acc:
+            max_acc = acc
+            best_ckpt = ckpt_dir / 'ckpt.pt'
+    return best_ckpt
+
+
 def train(args):
     # Prepare files
-    output_dir = os.path.join(args.output_dir, str(args.seed))
-    filename_scores = os.path.join(output_dir, 'scores.txt')
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = Path(args.output_dir, str(args.seed))
+    filename_scores = output_dir / 'scores.txt'
+    output_dir.mkdir(exist_ok=True, parents=True)
 
-    logger.info("Arguments:")
-    logger.info(json.dumps(vars(args), indent=4))
-    filename_params = os.path.join(output_dir, 'params.json')
+    print("Arguments:")
+    print(json.dumps(vars(args), indent=4))
+    filename_params = output_dir / 'params.json'
     json.dump(vars(args), open(filename_params, 'w'), indent=4)  # Save arguments
 
     # Device
     device = get_device()  # Get gpu with most free RAM
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {} n_gpu: {}".format(device, n_gpu))
+    print("device: {} n_gpu: {}".format(device, n_gpu))
 
-    logger.info('SEED: ' + str(args.seed))
+    print('SEED: ' + str(args.seed))
     set_seed(args.seed, n_gpu)
 
     # Prepare model
-    logger.info('Loading model from checkpoint "{}"'.format(args.init_checkpoint))
-    config = modeling.BertConfig.from_json_file(args.config_file)
-    if config.vocab_size % 8 != 0:
-        config.vocab_size += 8 - (config.vocab_size % 8)
-    model = modeling.BertForQuestionAnswering(config)
-    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-    state_dict = torch.load(args.init_checkpoint, map_location='cpu')
-    model.load_state_dict(state_dict['model'], strict=False)
-    model.to(device)
+    model = load_model(args.config_file, args.init_checkpoint).to(device)
 
     # Save config
     model_to_save = model.module if hasattr(model, 'module') else model
-    filename_config = os.path.join(output_dir, modeling.CONFIG_NAME)
+    filename_config = output_dir / modeling.CONFIG_NAME
     with open(filename_config, 'w') as f:
         f.write(model_to_save.config.to_json_string())
 
     # Tokenizer
-    logger.info('Loading tokenizer...')
-    tokenizer = load_tokenizer(args)
-    logger.info('Loaded tokenizer')
+    print('Loading tokenizer...')
+    tokenizer = load_tokenizer(args.tokenizer_type, args.vocab_file, args.vocab_model_file)
+    print('Loaded tokenizer')
 
     # Because tokenizer_type is a part of the feature file name,
     # new features will be generated for every tokenizer type.
-    tokenizer_name = output_dir_to_tokenizer_name(args.output_dir)
+    # tokenizer_name = output_dir_to_tokenizer_name(args.output_dir)
     file_train = os.path.join(args.data_dir, 'train.json')
     file_dev = os.path.join(args.data_dir, 'dev.json')
     file_train_examples, file_train_features = get_filename_examples_and_features(
-        'train', args, tokenizer_name=tokenizer_name, vocab_size=config.vocab_size)
+        'train', args.data_dir, args, tokenizer_name=args.tokenizer_name)
     file_dev_examples, file_dev_features = get_filename_examples_and_features(
-        'dev', args, tokenizer_name=tokenizer_name, vocab_size=config.vocab_size)
+        'dev', args.data_dir, args, tokenizer_name=args.tokenizer_name)
     # Generate train examples and features
-    logger.info('Generating train data:')
-    logger.info(f'  file_examples: {file_train_examples}')
-    logger.info(f'  file_features: {file_train_features}')
+    print('Generating train data:')
+    print(f'  file_examples: {file_train_examples}')
+    print(f'  file_features: {file_train_features}')
 
     train_examples, train_features = gen_examples_and_features(
         file_train,
@@ -411,9 +454,9 @@ def train(args):
         max_seq_length=args.max_seq_length,
         two_level_embeddings=args.two_level_embeddings,
         avg_char_tokens=args.avg_char_tokens)
-    logger.info('Generating dev data:')
-    logger.info(f'  file_examples: {file_dev_examples}')
-    logger.info(f'  file_features: {file_dev_features}')
+    print('Generating dev data:')
+    print(f'  file_examples: {file_dev_examples}')
+    print(f'  file_features: {file_dev_features}')
     dev_examples, dev_features = gen_examples_and_features(
         file_dev,
         file_dev_examples,
@@ -424,21 +467,21 @@ def train(args):
         two_level_embeddings=args.two_level_embeddings,
         avg_char_tokens=args.avg_char_tokens)
     del train_examples  # Only need examples for predictions
-    logger.info('Done generating data')
+    print('Done generating data')
 
-    args.batch_size = int(args.batch_size / args.gradient_accumulation_steps)
+    args.batch_size = int(args.batch_size / args.grad_acc_steps)
 
-    train_steps_per_epoch = len(train_features) // args.batch_size
+    steps_per_ep = len(train_features) // args.batch_size
     dev_steps_per_epoch = len(dev_features) // args.batch_size
     if len(train_features) % args.batch_size != 0:
-        train_steps_per_epoch += 1
+        steps_per_ep += 1
     if len(dev_features) % args.batch_size != 0:
         dev_steps_per_epoch += 1
-    total_steps = train_steps_per_epoch * args.epochs
+    total_steps = steps_per_ep * args.epochs
 
-    logger.info('steps per epoch: ' + str(train_steps_per_epoch))
-    logger.info('total steps: ' + str(total_steps))
-    logger.info('warmup steps: ' + str(int(args.warmup_rate * total_steps)))
+    print('steps per epoch: ' + str(steps_per_ep))
+    print('total steps: ' + str(total_steps))
+    print('warmup steps: ' + str(int(args.warmup_rate * total_steps)))
 
 
     optimizer = get_optimizer(
@@ -457,101 +500,129 @@ def train(args):
                                      avg_char_tokens=args.avg_char_tokens)
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
 
-    logger.info('***** Training *****')
-    logger.info(f'num epochs = {args.epochs}')
-    logger.info(f'steps for epoch = {train_steps_per_epoch}')
-    logger.info(f'batch size = {args.batch_size}')
-    logger.info(f'num train features = {len(train_features)}')
-    logger.info(f'num dev features = {len(dev_features)}')
+    print('*** Start Training ***')
+    print(f'num epochs = {args.epochs}')
+    print(f'steps for epoch = {steps_per_ep}')
+    print(f'batch size = {args.batch_size}')
+    print(f'num train features = {len(train_features)}')
+    print(f'num dev features = {len(dev_features)}')
 
     # 存一个全局最优的模型
-    global_steps = 1
+    global_step = 1
+    eval_interval = int(0.5 * steps_per_ep)
+    log_interval = 20
 
-    train_loss_history = []
-    dev_acc_history = []
-    dev_f1_history = []
+    train_losses = []
+    # dev_acc_history = []
+    # dev_f1_history = []
+    dev_history = []
+    train_start_time = time()
 
     for ep in range(args.epochs):
-        logger.info('Starting epoch %d' % (ep + 1))
-        num_train_steps = 0
+        print(f'*** Training Epoch {ep} ***')
+        
         total_loss = 0  # of this epoch
         model.train()
         model.zero_grad()
-        with tqdm(total=train_steps_per_epoch, desc='Epoch %d' % (ep + 1), mininterval=5.0) as pbar:
-            for step, batch in enumerate(train_dataloader):
-                batch = tuple(t.to(device) for t in batch)
-                tensors = expand_batch(batch, is_training=True,
-                                       two_level_embeddings=args.two_level_embeddings,
-                                       avg_char_tokens=args.avg_char_tokens)
-                (input_ids, input_mask, segment_ids, start_positions, end_positions,
-                 token_ids, pos_left, pos_right) = tensors
+        for step, batch in enumerate(train_dataloader):
+            batch = tuple(t.to(device) for t in batch)
+            tensors = expand_batch(
+                batch, is_training=True,
+                two_level_embeddings=args.two_level_embeddings,
+                avg_char_tokens=args.avg_char_tokens)
+            (input_ids, input_mask, segment_ids, start_positions, end_positions,
+                token_ids, pos_left, pos_right) = tensors
 
-                loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
-                             token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                             use_token_embeddings=args.two_level_embeddings,
-                             avg_char_tokens=args.avg_char_tokens)
-                if n_gpu > 1:
-                    loss = loss.mean()  # mean() to average on multi-gpu.
-                total_loss = loss.item()
-                pbar.set_postfix({'loss': '{0:1.5f}'.format(total_loss / (num_train_steps + 1e-5))})
-                pbar.update(1)
+            loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
+                            token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+                            use_token_embeddings=args.two_level_embeddings,
+                            avg_char_tokens=args.avg_char_tokens)
+            if n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu.
+            # total_loss += loss.item()
+            train_losses.append(loss.item())
 
-                loss.backward()
+            loss.backward()
 
-                num_train_steps += 1
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_steps += 1
+            if (step + 1) % args.grad_acc_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+                global_step += 1
 
-        dev_acc, dev_f1 = evaluate(
-            model, args, 
-            file_data='dev.json',
-            examples=dev_examples, 
-            features=dev_features, 
-            device=device, 
-            epoch=ep, 
-            output_dir=output_dir,
-        )
+            if global_step % log_interval == 0:
+                train_state = {
+                    'step': global_step,
+                    'ep': global_step / steps_per_ep,
+                    'loss': train_losses[-1],
+                    'time_elapsed': time() - train_start_time,
+                }
+                print(train_state, flush=True)
 
-        train_loss = total_loss / train_steps_per_epoch
-        train_loss_history.append(train_loss)
-        dev_acc_history.append(dev_acc)
-        dev_f1_history.append(dev_f1)
-        logger.info(f'train_loss = {train_loss}, dev_acc = {dev_acc}, dev_f1 = {dev_f1}')
+            if global_step % eval_interval == 0:
+                ckpt_dir = output_dir / f'ckpt-{global_step}'
+                ckpt_dir.mkdir(exist_ok=True)
+                dev_acc, dev_f1 = evaluate(
+                    model, args, 
+                    file_data=Path(args.data_dir, 'dev.json'),
+                    examples=dev_examples, 
+                    features=dev_features, 
+                    device=device, 
+                    epoch=ep, 
+                    output_dir=ckpt_dir,
+                )
+                result = {
+                    'step': global_step,
+                    'dev_acc': dev_acc,
+                    'dev_f1': dev_f1,
+                    'train_loss': train_losses[-1],
+                }
+                print(f'result: {result}', flush=True)
+                dev_history.append(result)
 
-        # Save all loss and acc
-        with open(filename_scores, 'w') as f:
-            f.write(f'epoch\ttrain_loss\tdev_acc\n')
-            for i in range(ep+1):
-                train_loss = train_loss_history[i]
-                dev_acc = dev_acc_history[i]
-                f.write(f'{i}\t{train_loss}\t{dev_acc}\n')
+                # Save model
+                model_to_save = model.module if hasattr(model, 'module') else model
+                ckpt_file = ckpt_dir / f'ckpt.pt'
+                print(f'Saving model to {ckpt_file}', flush=True)
+                torch.save(
+                    {"model": model_to_save.state_dict()},
+                    ckpt_file,
+                )
+                
+                # Save train loss
+                train_loss_file = output_dir / 'train_loss.json'
+                json.dump(train_losses, open(train_loss_file, 'w'), indent=2)
 
-        # Save model
-        model_to_save = model.module if hasattr(model, 'module') else model
-        dir_models = os.path.join(output_dir, 'models')
-        os.makedirs(dir_models, exist_ok=True)
-        model_filename = os.path.join(dir_models, 'model_epoch_' + str(ep) + '.bin')
-        torch.save(
-            {"model": model_to_save.state_dict()},
-            model_filename,
-        )
-        # Save best model
-        if len(dev_acc_history) == 0 or dev_acc_history[-1] == max(dev_acc_history):
-            best_model_filename = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
-            copyfile(model_filename, best_model_filename)
-            logger.info('New best model saved')
+            global_step += 1
 
-    file_scores_backup = filename_scores.replace('.txt', '_backup.txt')
-    copyfile(filename_scores, file_scores_backup)
-    mean_acc = sum(dev_acc_history) / len(dev_acc_history)
-    max_acc = max(dev_acc_history)
-    mean_f1 = sum(dev_f1_history) / len(dev_f1_history)
-    max_f1 = max(dev_f1_history)
+        # train_loss = total_loss / steps_per_ep
+        # train_loss_history.append(train_loss)
+        # dev_acc_history.append(dev_acc)
+        # dev_f1_history.append(dev_f1)
+        # print(f'train_loss = {train_loss}, dev_acc = {dev_acc}, dev_f1 = {dev_f1}')
 
-    logger.info(f'Mean F1: {mean_f1} Mean EM: {mean_acc}')
-    logger.info(f'Max F1: {max_f1} Max EM: {max_acc}')
+        # # Save all loss and acc
+        # with open(filename_scores, 'w') as f:
+        #     f.write(f'epoch\ttrain_loss\tdev_acc\n')
+        #     for i in range(ep+1):
+        #         train_loss = train_loss_history[i]
+        #         dev_acc = dev_acc_history[i]
+        #         f.write(f'{i}\t{train_loss}\t{dev_acc}\n')
+
+        # # Save best model
+        # if len(dev_acc_history) == 0 or dev_acc_history[-1] == max(dev_acc_history):
+        #     best_model_filename = output_dir / modeling.FILENAME_BEST_MODEL
+        #     copyfile(model_filename, best_model_filename)
+        #     print('New best model saved')
+
+    # file_scores_backup = filename_scores.replace('.txt', '_backup.txt')
+    # copyfile(filename_scores, file_scores_backup)
+    # mean_acc = sum(dev_acc_history) / len(dev_acc_history)
+    # max_acc = max(dev_acc_history)
+    # mean_f1 = sum(dev_f1_history) / len(dev_f1_history)
+    # max_f1 = max(dev_f1_history)
+
+    # print(f'Mean F1: {mean_f1} Mean EM: {mean_acc}')
+    # print(f'Max F1: {max_f1} Max EM: {max_acc}')
 
     # release the memory
     del model
@@ -562,49 +633,54 @@ def train(args):
 
 
 def test(args):
-    logger.info('Test')
-    logger.info(json.dumps(vars(args), indent=4))
+    print('Test')
+    print(json.dumps(vars(args), indent=4))
 
     # Prepare files
-    output_dir = os.path.join(args.output_dir, str(args.seed))
-    assert os.path.exists(output_dir)
+    output_dir = Path(args.output_dir, str(args.seed))
+    test_dir = output_dir / args.test_name
+    data_dir = Path(args.data_dir, args.test_name)
+    assert output_dir.exists()
     assert args.batch_size > 0, 'Batch size must be positive'
 
     # Device
     device = get_device()  # Get gpu with most free RAM
     n_gpu = torch.cuda.device_count()
-    logger.info("device: {} n_gpu: {}".format(device, n_gpu))
+    print("device: {} n_gpu: {}".format(device, n_gpu))
 
-    logger.info('SEED: ' + str(args.seed))
+    print('SEED: ' + str(args.seed))
     set_seed(args.seed, n_gpu)
 
     # Prepare model
-    file_ckpt = os.path.join(output_dir, modeling.FILENAME_BEST_MODEL)
-    logger.info('Preparing model from checkpoint {}'.format(file_ckpt))
-    config = modeling.BertConfig.from_json_file(args.config_file)
-    if config.vocab_size % 8 != 0:
-        config.vocab_size += 8 - (config.vocab_size % 8)
-    model = modeling.BertForQuestionAnswering(config)
-    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-    state_dict = torch.load(file_ckpt, map_location='cpu')['model']
-    model.load_state_dict(state_dict, strict=False)
-    model.to(device)
+    # best_ckpt = output_dir / modeling.FILENAME_BEST_MODEL
+    if args.test_ckpt:
+        best_ckpt = args.test_ckpt
+    else:
+        best_ckpt = get_best_ckpt(output_dir)
+    model = load_model(args.config_file, best_ckpt).to(device)
+    # print('Preparing model from checkpoint {}'.format(best_ckpt))
+    # config = modeling.BertConfig.from_json_file(args.config_file)
+    # if config.vocab_size % 8 != 0:
+    #     config.vocab_size += 8 - (config.vocab_size % 8)
+    # model = modeling.BertForQuestionAnswering(config)
+    # modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
+    # state_dict = torch.load(best_ckpt, map_location='cpu')['model']
+    # model.load_state_dict(state_dict, strict=False)
+    # model.to(device)
 
     # Tokenizer
-    logger.info('Loading tokenizer...')
-    tokenizer = load_tokenizer(args)
-    logger.info('Loaded tokenizer')
+    tokenizer = load_tokenizer(
+        args.tokenizer_type, args.vocab_file, args.vocab_model_file)
 
     # Because tokenizer_type is a part of the feature file name,
     # new features will be generated for every tokenizer type.
-    tokenizer_name = output_dir_to_tokenizer_name(args.output_dir)
-    file_data = os.path.join(args.data_dir, 'test.json')
+    file_data = data_dir / 'test.json'
     file_examples, file_features = get_filename_examples_and_features(
-        'test', args, tokenizer_name=tokenizer_name, vocab_size=config.vocab_size)
+        'test', data_dir, args, tokenizer_name=args.tokenizer_name)
     # Generate train examples and features
-    logger.info('Generating data:')
-    logger.info(f'  file_examples: {file_examples}')
-    logger.info(f'  file_features: {file_features}')
+    print('Generating data:', flush=True)
+    print(f'  file_examples: {file_examples}', flush=True)
+    print(f'  file_features: {file_features}', flush=True)
     examples, features = gen_examples_and_features(
         file_data,
         file_examples,
@@ -613,43 +689,42 @@ def test(args):
         tokenizer=tokenizer,
         max_seq_length=args.max_seq_length,
         two_level_embeddings=args.two_level_embeddings,
-        avg_char_tokens=args.avg_char_tokens)
-    logger.info('Done generating data')
-
-    logger.info('***** Testing *****')
-    logger.info(f'batch size = {args.batch_size}')
-    logger.info(f'num features = {len(features)}')
+        avg_char_tokens=args.avg_char_tokens,
+    )
+    print('Done generating data', flush=True)
+    print('***** Testing *****', flush=True)
+    print(f'batch size = {args.batch_size}', flush=True)
+    print(f'num features = {len(features)}', flush=True)
 
     model.zero_grad()
     acc, f1 = evaluate(
         model, 
         args,
-        file_data='test.json',
+        file_data=file_data,
         examples=examples,
         features=features,
         device=device,
         epoch='test',
-        output_dir=output_dir
+        output_dir=test_dir,
     )
-    logger.info(f'test: acc = {acc}, f1 = {f1}')
+    result = {'acc': acc, 'f1': f1}
+    print(f'result: {result}', flush=True)
 
-    file_test_result = os.path.join(output_dir, 'result_test.txt')
-    with open(file_test_result, 'w') as f:
-        f.write('test_loss\ttest_acc\n')
-        f.write(f'None\t{acc}\n')
-    print('Testing finished')
+    result_file = test_dir / 'result.json'
+    json.dump(result, open(result_file, 'w'))
+    print('*** Testing finished ***', flush=True)
 
 
 def main(args):
     # Sanity check
-    assert sum([args.two_level_embeddings, args.avg_char_tokens]) == 1
-    assert args.gradient_accumulation_steps > 0
+    # assert sum([args.two_level_embeddings, args.avg_char_tokens]) == 1
+    assert args.grad_acc_steps > 0
     
     if args.do_train:
         train(args)
     if args.do_test:
         test(args)
-    print('DONE')
+    print('DONE', flush=True)
 
 
 if __name__ == '__main__':

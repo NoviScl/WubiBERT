@@ -28,6 +28,7 @@ import pickle
 import sentencepiece as spm
 import jieba
 import oknlp
+from pypinyin import lazy_pinyin
 
 from file_utils import cached_path
 
@@ -383,7 +384,6 @@ class CommonZhNoIndexTokenizer(object):
         elif 'zhuyin' in vocab_file:
             self.map_dict = load_dict(ch2zhuyin)
 
-        self.vocab_file = vocab_file
         self.vocab = load_vocab_spm(vocab_file)
         self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
         self.ids_to_tokens = collections.OrderedDict(
@@ -834,7 +834,6 @@ class CommonZhTokenizer(object):
         elif 'zhuyin' in vocab_file:
             self.map_dict = load_dict(ch2zhuyin)
 
-        self.vocab_file = vocab_file
         self.vocab = load_vocab_spm(vocab_file)
         self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
         self.ids_to_tokens = collections.OrderedDict(
@@ -896,6 +895,110 @@ class CommonZhTokenizer(object):
     ## TODO: implement the detokenizer!
     
 
+
+
+
+class PypinyinTokenizer(object):
+    "for cangjie_zh, wubi_zh, ... all such tokenization"
+
+    def __init__(self, vocab_file, model_file, do_lower_case=True, max_len=None,
+                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        if (not os.path.isfile(vocab_file)) or (not os.path.isfile(model_file)):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained ".format(vocab_file))
+       
+        self.vocab = load_vocab_spm(vocab_file)
+        self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()])
+        self.max_len = max_len if max_len is not None else int(1e12)
+    
+    def convert_line(self, text, nosep=False):
+        line = text.strip()
+        sep = chr(ord('_')+50000)
+        if nosep:
+            sep = ""
+        ## sep after each char
+        return sep.join(lazy_pinyin(line)) + sep
+    
+    def tokenize(self, text, nosep=False):
+        out_line = self.convert_line(text, nosep)
+        return self.spm_tokenizer.encode(out_line, out_type=str)
+
+    def convert_tokens_to_ids(self, tokens):
+        """Converts a sequence of tokens into ids using the vocab."""
+        ids = []
+        for token in tokens:
+            if token in self.vocab:
+                ids.append(self.vocab[token])
+            else:
+                ids.append(self.vocab['[UNK]'])
+        if len(ids) > self.max_len:
+            raise ValueError(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this BERT model ({} > {}). Running this"
+                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids):
+        """Converts a sequence of ids in wordpiece tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            tokens.append(self.ids_to_tokens[i])
+        return tokens
+    
+
+
+class PypinyinNosepTokenizer(object):
+    "for cangjie_zh, wubi_zh, ... all such tokenization"
+
+    def __init__(self, vocab_file, model_file, do_lower_case=True, max_len=None,
+                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        if (not os.path.isfile(vocab_file)) or (not os.path.isfile(model_file)):
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained ".format(vocab_file))
+       
+        self.vocab = load_vocab_spm(vocab_file)
+        self.spm_tokenizer = spm.SentencePieceProcessor(model_file=model_file)
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()])
+        self.max_len = max_len if max_len is not None else int(1e12)
+    
+    def convert_line(self, text, nosep=True):
+        line = text.strip()
+        sep = chr(ord('_')+50000)
+        if nosep:
+            sep = ""
+        ## sep after each char
+        return sep.join(lazy_pinyin(line)) + sep
+    
+    def tokenize(self, text, nosep=True):
+        out_line = self.convert_line(text, nosep)
+        return self.spm_tokenizer.encode(out_line, out_type=str)
+
+    def convert_tokens_to_ids(self, tokens):
+        """Converts a sequence of tokens into ids using the vocab."""
+        ids = []
+        for token in tokens:
+            if token in self.vocab:
+                ids.append(self.vocab[token])
+            else:
+                ids.append(self.vocab['[UNK]'])
+        if len(ids) > self.max_len:
+            raise ValueError(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this BERT model ({} > {}). Running this"
+                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids):
+        """Converts a sequence of ids in wordpiece tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            tokens.append(self.ids_to_tokens[i])
+        return tokens
 
 
 
@@ -1381,4 +1484,6 @@ ALL_TOKENIZERS = {
     'CWS': CWSNewTokenizer,
     'Byte': ByteTokenizer,
     'RandomIndex': RandomIndexTokenizer,
+    'Pypinyin': PypinyinTokenizer,
+    'PypinyinNosep': PypinyinNosepTokenizer,
 }

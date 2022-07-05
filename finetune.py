@@ -29,12 +29,12 @@ DO_TRAIN = True
 DO_TEST = True
 
 TWO_LEVEL_EMBEDDINGS = False
-AVG_CHAR_TOKENS = True
+AVG_CHAR_TOKENS = False
 # USE_SHUFFLED = False
 # USE_NO_INDEX = False
 USE_CWS = False
 USE_500 = False
-PACK_SEQ = False
+PACK_SEQ = True
 
 # `run_glue.py` has max_seq_len = 128 by default
 # MAX_SEQ_LENS = [16, 24, 32, 48, 64, 80, 96, 128]  # iflytek
@@ -66,15 +66,15 @@ NOISE_TEST = [
 
 SEEDS = [
     10,
-    11, 
-    12, 
-    13, 
-    14,
-    15, 
-    16, 
-    17, 
-    18, 
-    19,
+    # 11, 
+    # 12, 
+    # 13, 
+    # 14,
+    # 15, 
+    # 16, 
+    # 17, 
+    # 18, 
+    # 19,
 ]
 TOKENIZERS = [
     # 'cangjie',
@@ -95,13 +95,13 @@ TOKENIZERS = [
 
 
 TASKS = [
-    # 'tnews',
+    'tnews',
     # 'iflytek',
     # 'wsc',
     # 'afqmc',
     # 'csl',
     # 'ocnli',
-    'cmrc',
+    # 'cmrc',
     # 'drcd',
     # 'chid',
     # 'c3',
