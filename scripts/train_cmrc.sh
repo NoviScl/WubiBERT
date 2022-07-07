@@ -1,7 +1,7 @@
 
 data_dir="/home/chenyingfa/WubiBERT/datasets/realtypo/cmrc"
 test_name="test_clean"
-test_name="test_noisy_keyboard_2"
+test_name="test_noisy_keyboard_3"
 
 
 tok_name="char"
@@ -32,16 +32,16 @@ vocab_name="pinyin_no_index_22675"
 # vocab_name="pinyin_zh_22675"
 
 
-tok_name="pypinyin"
-tok_type="Pypinyin"
-ckpt="/home/chenyingfa/models/pypinyin.pt"
-vocab_name="pypinyin_22675_notone_noindex"
+# tok_name="pypinyin"
+# tok_type="Pypinyin"
+# ckpt="/home/chenyingfa/models/pypinyin.pt"
+# vocab_name="pypinyin_22675_notone_noindex"
 
 
-tok_name="pypinyin_nosep"
-tok_type="PypinyinNosep"
-ckpt="/home/chenyingfa/models/pypinyin_nosep.pt"
-vocab_name="pypinyin_22675_notone_noindex_nosep"
+# tok_name="pypinyin_nosep"
+# tok_type="PypinyinNosep"
+# ckpt="/home/chenyingfa/models/pypinyin_nosep.pt"
+# vocab_name="pypinyin_22675_notone_noindex_nosep"
 
 # output_dir="logs/realtypo/cmrc/${tok_name}_twolevel"
 output_dir="logs/realtypo/cmrc/${tok_name}"
@@ -58,7 +58,7 @@ cmd+=" --vocab_file tokenizers/${vocab_name}.vocab"
 cmd+=" --vocab_model_file tokenizers/${vocab_name}.model"
 cmd+=" --tokenizer_name ${tok_name}"
 cmd+=" --output_dir ${output_dir}"
-cmd+=" --do_train"
+# cmd+=" --do_train"
 cmd+=" --do_test"
 cmd+=" --seed $seed"
 # cmd+=" --two_level_embeddings"
