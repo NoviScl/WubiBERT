@@ -5,8 +5,9 @@ import pickle
 from tokenization import CommonZhNoIndexTokenizer
 import string
 
-tokenizer = CommonZhNoIndexTokenizer('tokenizers/wubi_no_index_22675.vocab', 
-                                     'tokenizers/wubi_no_index_22675.model')
+vocab_prefix = 'tokenizers/wubi_no_index_22675'
+tokenizer = CommonZhNoIndexTokenizer(f'{vocab_prefix}.vocab', 
+                                     f'{vocab_prefix}.model')
 
 wubi2ch = "data/wubi_to_chinese.pkl"
 ch2wubi = "data/chinese_to_wubi.pkl"
@@ -95,13 +96,18 @@ def _add_noise(sent, ratio, ch_2_enc, same_dict):
             enc_new = ''.join([i for i in ch_2_enc[newc] if not i.isdigit()])
             if enc_orig != enc_new:
                 print(enc_orig, enc_new)
+    if newsent != sent:
+        print(sent)
+        print(newsent)
+        print(ratio)
+        exit()
     return newsent, changed_chars, total_chars
 
 
 TEXT_KEYS = ['sentence1', 'sentence2']
 
 
-def change_pinyin(orig_data, ratio=1):
+def change_pinyin(orig_data, ratio):
     random.seed(2021)
     data = []
     ## pinyin substitute
@@ -114,6 +120,7 @@ def change_pinyin(orig_data, ratio=1):
             changed_chars += changed
             total_chars += total
         data.append(eg)
+    print(f'{changed_chars = }')
     print ("changed ratio: ", changed_chars / total_chars)
     return data
 
@@ -149,39 +156,41 @@ def _dump_json(data, file):
 
 
 if __name__ == '__main__':
-    # dataset = 'ocnli'
     dataset = 'afqmc'
 
     FILE_ORIG_DATA = f'datasets/{dataset}/split/test.json'
     DIR_DEST_DATA = f'datasets/{dataset}/noisy'
     orig_data = _read_json(FILE_ORIG_DATA)
     os.makedirs(DIR_DEST_DATA, exist_ok=True)
-    from tokenization import CommonZhNoIndexTokenizer
-    vocab_file = 'tokenizers/wubi_no_index_22675.vocab'
-    vocab_model_file = vocab_file.replace('.vocab', '.model')
-    tokenizer = CommonZhNoIndexTokenizer(vocab_file, vocab_model_file)
+    # from tokenization import CommonZhNoIndexTokenizer
+    # vocab_file = 'tokenizers/wubi_no_index_22675.vocab'
+    # vocab_model_file = vocab_file.replace('.vocab', '.model')
+    # tokenizer = CommonZhNoIndexTokenizer(vocab_file, vocab_model_file)
 
     def gen_phonetic_data():
-        for ratio in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]:
+        for ratio in [
+            0.0, 
+            # 0.1, 0.2, 0.3, 0.4, 0.5,
+            ]:
             dir_phonetic = DIR_DEST_DATA + '/phonetic_' + str(int(ratio * 100))
             print(dir_phonetic)
             os.makedirs(dir_phonetic, exist_ok=True)
             file_phonetic = dir_phonetic + '/test.json'
             data = change_pinyin(orig_data, ratio=ratio)
+            print(f'Dumping to {file_phonetic}')
             _dump_json(data, file_phonetic)
+
     def gen_glyph_data():
         for ratio in [0.5, 1.0]:
             print("ratio:", ratio)
-
-
             dir_glyph = DIR_DEST_DATA + '/glyph_' + str(int(ratio * 100))
             print(dir_glyph)
             os.makedirs(dir_glyph, exist_ok=True)
             data = change_wubi(orig_data, ratio=ratio)
             file_glyph = dir_glyph + '/test.json'
             _dump_json(data, file_glyph)
-            
             print('')
-    gen_glyph_data()
+
+    # gen_glyph_data()
     gen_phonetic_data()
 
