@@ -115,6 +115,7 @@ def change_pinyin(orig_data, ratio):
     total_chars = 0
     for eg in orig_data:
         new_eg = {}
+        new_eg['label'] = eg['label']
         for key in TEXT_KEYS:
             newsent, changed, total = _add_noise(eg[key], ratio, ch2pinyin, same_dict_pinyin)
             new_eg[key] = newsent
@@ -170,8 +171,9 @@ def gen_phonetic_data(clean_data, ratio):
     
 
 if __name__ == '__main__':
-    FILE_SRC = Path('datasets/realtypo/afqmc/dev.json')
-    FILE_DST = Path('datasets/realtypo/afqmc/da_noise/phonetic_50/dev.json')
+    filename = 'train.json'
+    FILE_SRC = Path('datasets/realtypo/afqmc', filename)
+    FILE_DST = Path('datasets/realtypo/afqmc/da_noise/phonetic_50', filename)
     orig_data = _read_json(FILE_SRC)
 
     FILE_DST.parent.mkdir(parents=True, exist_ok=True)
