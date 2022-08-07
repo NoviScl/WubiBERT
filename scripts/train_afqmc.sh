@@ -3,8 +3,8 @@
 task="afqmc"
 task="afqmc_balanced"
 # data_dir="datasets/${task}/split"
-# test_name="test_noisy_keyboard_2"
-test_name="test_clean"
+test_name="test_noisy_keyboard_3"
+# test_name="test_clean"
 
 data_dir="datasets/realtypo/${task}"
 test_dir="datasets/realtypo/${task}/${test_name}"
@@ -13,17 +13,17 @@ model_name="char"
 tok_type="BertZh"
 vocab_name="bert_chinese_uncased_22675"
 
-# model_name="raw"
-# tok_type="RawZh"
-# vocab_name="raw_zh_22675"
+model_name="raw"
+tok_type="RawZh"
+vocab_name="raw_zh_22675"
 
-model_name="pinyin"
-tok_type="CommonZh"
-vocab_name="pinyin_zh_22675"
+# model_name="pinyin"
+# tok_type="CommonZh"
+# vocab_name="pinyin_zh_22675"
 
-model_name="pinyin_no_index"
-tok_type="CommonZhNoIndex"
-vocab_name="pinyin_no_index_22675"
+# model_name="pinyin_no_index"
+# tok_type="CommonZhNoIndex"
+# vocab_name="pinyin_no_index_22675"
 
 # model_name="pypinyin"
 # tok_type="Pypinyin"
@@ -41,7 +41,7 @@ vocab_name="pinyin_no_index_22675"
 
 
 
-seed="100"
+seed="0"
 ckpt="/home/chenyingfa/models/${model_name}.pt"
 output_dir="logs/realtypo/${task}/${model_name}/${seed}/"
 # output_dir="logs/${task}/${model_name}/${seed}/"

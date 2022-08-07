@@ -602,6 +602,7 @@ def test(args):
         two_level_embeddings=args.two_level_embeddings)
 
     # Save result
+    print(f'Dumping results to {output_dir}')
     json.dump(result['preds'].tolist(), open(output_dir / 'preds.json', 'w'), indent=2, ensure_ascii=False)
     del result['preds']
     json.dump(result, open(output_dir / 'result.json', 'w'), ensure_ascii=False)
