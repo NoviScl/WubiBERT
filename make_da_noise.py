@@ -172,9 +172,9 @@ def gen_phonetic_data(clean_data, ratio):
     
 
 if __name__ == '__main__':
-    filename = 'train.json'
-    FILE_SRC = Path('datasets/realtypo/afqmc', filename)
-    FILE_DST = Path('datasets/realtypo/afqmc/da_noise/phonetic_50', filename)
+    filename = 'dev.json'
+    FILE_SRC = Path('datasets/realtypo/afqmc_balanced', filename)
+    FILE_DST = Path('datasets/realtypo/afqmc_balanced_da_noise/phonetic_50', filename)
     orig_data = _read_json(FILE_SRC)
 
     FILE_DST.parent.mkdir(parents=True, exist_ok=True)
