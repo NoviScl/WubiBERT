@@ -16,13 +16,13 @@ model_name="raw"
 tok_type="RawZh"
 vocab_name="raw_zh_22675"
 
-model_name="pinyin"
-tok_type="CommonZh"
-vocab_name="pinyin_zh_22675"
+# model_name="pinyin"
+# tok_type="CommonZh"
+# vocab_name="pinyin_zh_22675"
 
-model_name="pinyin_no_index"
-tok_type="CommonZhNoIndex"
-vocab_name="pinyin_no_index_22675"
+# model_name="pinyin_no_index"
+# tok_type="CommonZhNoIndex"
+# vocab_name="pinyin_no_index_22675"
 
 # model_name="pypinyin"
 # tok_type="Pypinyin"
@@ -50,7 +50,7 @@ do
         test_dir="datasets/realtypo/afqmc/${test_name}"  # READIN noise
         # test_dir="datasets/afqmc/noisy/${test_name}"       # Synthetic noise from SCT
         ckpt="/home/chenyingfa/models/${model_name}.pt"
-        output_dir="logs/realtypo/afqmc/${model_name}/${seed}/"
+        output_dir="logs/realtypo/afqmc_da_noise/${model_name}/${seed}/"
         test_name="test_synthetic_noise_${test_name}"
 
         cmd="python3 run_glue.py"

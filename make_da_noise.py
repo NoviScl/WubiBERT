@@ -105,6 +105,7 @@ def _add_noise(sent, ratio, ch_2_enc, same_dict):
 
 
 TEXT_KEYS = ['sentence1', 'sentence2']
+LABEL_KEY = 'label'
 
 
 def change_pinyin(orig_data, ratio):
@@ -115,12 +116,12 @@ def change_pinyin(orig_data, ratio):
     total_chars = 0
     for eg in orig_data:
         new_eg = {}
-        new_eg['label'] = eg['label']
         for key in TEXT_KEYS:
             newsent, changed, total = _add_noise(eg[key], ratio, ch2pinyin, same_dict_pinyin)
             new_eg[key] = newsent
             changed_chars += changed
             total_chars += total
+        new_eg[LABEL_KEY] = eg[LABEL_KEY]
         data.append(new_eg)
     print(f'{changed_chars = }')
     print ("changed ratio: ", changed_chars / total_chars)
