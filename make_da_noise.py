@@ -104,8 +104,8 @@ def _add_noise(sent, ratio, ch_2_enc, same_dict):
     return newsent, changed_chars, total_chars
 
 
-TEXT_KEYS = ['sentence1', 'sentence2']
-LABEL_KEY = 'label'
+# TEXT_KEYS = ['sentence1', 'sentence2']
+NOISE_KEYS = ['question']
 
 
 def change_pinyin(orig_data, ratio):
@@ -116,12 +116,14 @@ def change_pinyin(orig_data, ratio):
     total_chars = 0
     for eg in orig_data:
         new_eg = {}
-        for key in TEXT_KEYS:
-            newsent, changed, total = _add_noise(eg[key], ratio, ch2pinyin, same_dict_pinyin)
-            new_eg[key] = newsent
-            changed_chars += changed
-            total_chars += total
-        new_eg[LABEL_KEY] = eg[LABEL_KEY]
+        for key in eg:
+            if key in NOISE_KEYS:
+                newsent, changed, total = _add_noise(eg[key], ratio, ch2pinyin, same_dict_pinyin)
+                new_eg[key] = newsent
+                changed_chars += changed
+                total_chars += total
+            else:
+                new_eg[key] = eg[key]
         data.append(new_eg)
     print(f'{changed_chars = }')
     print ("changed ratio: ", changed_chars / total_chars)
@@ -169,12 +171,16 @@ def gen_phonetic_data(clean_data, ratio):
     all_data = clean_data + sum(noisy_data, [])  # Append noisy data to clean
     print(f'# examples after data augmentation: {len(all_data)}')
     return all_data
-    
 
-if __name__ == '__main__':
-    filename = 'dev.json'
-    FILE_SRC = Path('datasets/realtypo/afqmc_balanced', filename)
-    FILE_DST = Path('datasets/realtypo/afqmc_balanced_da_noise/phonetic_50', filename)
+
+def main():
+    filename = 'train.json'
+    # FILE_SRC = Path('datasets/realtypo/afqmc_balanced', filename)
+    # FILE_DST = Path('datasets/realtypo/afqmc_balanced_da_noise/phonetic_50', filename)
+    
+    FILE_SRC = Path('datasets/realtypo/cmrc', filename)
+    FILE_DST = Path('datasets/realtypo/cmrc_da_noise/phonetic_50', filename)
+    
     orig_data = _read_json(FILE_SRC)
 
     FILE_DST.parent.mkdir(parents=True, exist_ok=True)
@@ -194,3 +200,7 @@ if __name__ == '__main__':
     data = gen_phonetic_data(orig_data, 0.5)
     print(f'Dumping to {FILE_DST}')
     _dump_json(data, FILE_DST)
+
+
+if __name__ == '__main__':
+    main()

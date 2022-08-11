@@ -126,15 +126,13 @@ def parse_args():
     p.add_argument('--test_dir')
     p.add_argument('--do_train', action='store_true')
     p.add_argument('--do_test', action='store_true')
-    p.add_argument('--init_checkpoint')
+    p.add_argument('--init_ckpt')
     p.add_argument('--config_file', type=str, required=True)
     p.add_argument('--tokenizer_type', type=str, required=True)
     p.add_argument('--vocab_file', type=str, required=True)
     p.add_argument('--vocab_model_file', type=str, required=True)
     p.add_argument('--cws_vocab_file', type=str, default=None)
     p.add_argument('--output_dir', type=str, default='logs/temp')
-    p.add_argument("--do_train", action='store_true', help="Whether to run training.")
-    p.add_argument('--do_test', action='store_true', help='Whether to test.')
     p.add_argument('--two_level_embeddings', action='store_true')
     p.add_argument('--avg_char_tokens', action='store_true')
     p.add_argument('--debug', action='store_true')
@@ -385,24 +383,22 @@ def get_best_ckpt(output_dir: Path) -> Path:
 def train(args):
     # Prepare files
     output_dir = Path(args.output_dir, str(args.seed))
-    filename_scores = output_dir / 'scores.txt'
     output_dir.mkdir(exist_ok=True, parents=True)
 
+    # Save arguments
     print("Arguments:")
     print(json.dumps(vars(args), indent=4))
-    filename_params = output_dir / 'params.json'
-    json.dump(vars(args), open(filename_params, 'w'), indent=4)  # Save arguments
+    args_file = output_dir / 'train_args.json'
+    json.dump(vars(args), open(args_file, 'w'), indent=4)
 
     # Device
     device = get_device()  # Get gpu with most free RAM
     n_gpu = torch.cuda.device_count()
     print("device: {} n_gpu: {}".format(device, n_gpu))
-
-    print('SEED: ' + str(args.seed))
     set_seed(args.seed)
 
     # Prepare model
-    model = load_model(args.config_file, args.init_checkpoint).to(device)
+    model = load_model(args.config_file, args.init_ckpt).to(device)
 
     # Save config
     model_to_save = model.module if hasattr(model, 'module') else model
@@ -496,8 +492,8 @@ def train(args):
 
     # 存一个全局最优的模型
     global_step = 1
-    eval_interval = int(0.5 * steps_per_ep)
-    log_interval = 20
+    eval_interval = steps_per_ep // 4
+    log_interval = 50
 
     train_losses = []
     # dev_acc_history = []
@@ -508,7 +504,6 @@ def train(args):
     for ep in range(args.epochs):
         print(f'*** Training Epoch {ep} ***')
         
-        total_loss = 0  # of this epoch
         model.train()
         model.zero_grad()
         for step, batch in enumerate(train_dataloader):
@@ -534,7 +529,6 @@ def train(args):
             )
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
-            # total_loss += loss.item()
             train_losses.append(loss.item())
 
             loss.backward()
@@ -634,7 +628,7 @@ def test(args):
     # Prepare files
     output_dir = Path(args.output_dir, str(args.seed))
     test_dir = output_dir / args.test_name
-    data_dir = Path(args.test_dir, args.test_name)
+    data_dir = Path(args.test_dir)
     assert output_dir.exists()
     assert args.batch_size > 0, 'Batch size must be positive'
 
