@@ -4,14 +4,8 @@ import argparse
 from pathlib import Path
 import collections
 import json
-# import os
-import random
 from time import time
-# import logging
-# from shutil import copyfile
 
-# from tqdm import tqdm
-import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -25,7 +19,6 @@ from utils import (
     json_save_by_line,
     get_device, 
     set_seed,
-    # output_dir_to_tokenizer_name,
 )
 
 from mrc.preprocess.cmrc2018_evaluate import get_eval
@@ -34,13 +27,6 @@ from mrc.preprocess.cmrc2018_preprocess import (
     read_cmrc_examples,
     convert_examples_to_features,
 )
-
-# logging.basicConfig(
-#     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-#     datefmt='%m/%d/%Y %H:%M:%S',
-#     level=logging.INFO,
-# )
-# logger = logging.getLogger(__name__)
 
 
 def evaluate(
@@ -57,14 +43,10 @@ def evaluate(
     RawResult = collections.namedtuple(
         "RawResult",
         ["unique_id", "start_logits", "end_logits"])
-    # dir_preds = Path(output_dir, 'predictions')
-    # os.makedirs(dir_preds, exist_ok=True)
     output_dir.mkdir(exist_ok=True, parents=True)
     file_preds = output_dir / 'preds.json'
-    # output_nbest_file = file_preds.replace('predictions_', 'nbest_')
     file_nbest = output_dir / 'nbest.json'
     
-    # all_examples_index = torch.arange(len(features), dtype=torch.long)
     dataset = features_to_dataset(features, is_training=False,
                                   two_level_embeddings=args.two_level_embeddings,
                                   avg_char_tokens=args.avg_char_tokens)
@@ -721,7 +703,6 @@ def test(args):
 
 def main(args):
     # Sanity check
-    # assert sum([args.two_level_embeddings, args.avg_char_tokens]) == 1
     assert args.grad_acc_steps > 0
     
     if args.do_train:
