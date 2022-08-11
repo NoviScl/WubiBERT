@@ -4,13 +4,13 @@ import argparse
 from pathlib import Path
 import collections
 import json
-import os
+# import os
 import random
 from time import time
 # import logging
-from shutil import copyfile
+# from shutil import copyfile
 
-from tqdm import tqdm
+# from tqdm import tqdm
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
@@ -20,8 +20,13 @@ from tokenization import (
     ALL_TOKENIZERS,
 )
 from optimization import get_optimizer
-from utils import (json_load_by_line, json_save_by_line,
-                   get_device, output_dir_to_tokenizer_name)
+from utils import (
+    json_load_by_line, 
+    json_save_by_line,
+    get_device, 
+    set_seed,
+    # output_dir_to_tokenizer_name,
+)
 
 from mrc.preprocess.cmrc2018_evaluate import get_eval
 from mrc.preprocess.cmrc2018_output import write_predictions
@@ -105,7 +110,7 @@ def evaluate(
         two_level_embeddings=False,
     )
 
-    # file_truth = os.path.join(args.data_dir, file_data)
+    # file_truth = os.path.join(args.test_dir, file_data)
     res = get_eval(file_data, file_preds)
     result_file = output_dir / 'result.json'
     json.dump(res, open(result_file, 'w'))
@@ -133,7 +138,12 @@ def parse_args():
     p.add_argument('--seed', type=int, default=0)
 
     # Other arguments
-    p.add_argument('--data_dir', type=str, required=True)
+    # p.add_argument('--data_dir', type=str, required=True)
+    p.add_argument('--train_dir')
+    p.add_argument('--dev_dir')
+    p.add_argument('--test_dir')
+    p.add_argument('--do_train', action='store_true')
+    p.add_argument('--do_test', action='store_true')
     p.add_argument('--init_checkpoint')
     p.add_argument('--config_file', type=str, required=True)
     p.add_argument('--tokenizer_type', type=str, required=True)
@@ -294,16 +304,16 @@ def get_filename_examples_and_features(
 
 
 def gen_examples_and_features(
-    file_data,
-    file_examples,
-    file_features,
-    is_training,
+    file_data: Path,
+    file_examples: Path,
+    file_features: Path,
+    is_training: bool,
     tokenizer,
-    max_seq_length,
+    max_seq_length: int,
     # max_query_length=64,
     # doc_stride=128,
-    two_level_embeddings=False,
-    avg_char_tokens=False,
+    two_level_embeddings: bool=False,
+    avg_char_tokens: bool=False,
     ):
     '''
     Return:
@@ -316,7 +326,7 @@ def gen_examples_and_features(
 
     examples, features = None, None
     # Examples
-    if use_example_cache and os.path.exists(file_examples):
+    if use_example_cache and file_examples.exists():
         print('Found example file, loading...')
         examples = json_load_by_line(file_examples)
         print(f'Loaded {len(examples)} examples')
@@ -336,7 +346,7 @@ def gen_examples_and_features(
         print(f'Loaded {len(examples)} examples', flush=True)
 
     # Load or gen features
-    if use_feature_cache and os.path.exists(file_features):
+    if use_feature_cache and file_features.exists():
         print('Found feature file, loading...')
         features = json_load_by_line(file_features)
         print(f'Loaded {len(features)} features')
@@ -355,14 +365,6 @@ def gen_examples_and_features(
         print(f'Loaded {len(features)} features', flush=True)
 
     return examples, features
-
-
-def set_seed(seed, n_gpu):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(seed)
 
 
 def load_model(config_file: str, init_ckpt: str):
@@ -415,7 +417,7 @@ def train(args):
     print("device: {} n_gpu: {}".format(device, n_gpu))
 
     print('SEED: ' + str(args.seed))
-    set_seed(args.seed, n_gpu)
+    set_seed(args.seed)
 
     # Prepare model
     model = load_model(args.config_file, args.init_checkpoint).to(device)
@@ -428,18 +430,19 @@ def train(args):
 
     # Tokenizer
     print('Loading tokenizer...')
-    tokenizer = load_tokenizer(args.tokenizer_type, args.vocab_file, args.vocab_model_file)
+    tokenizer = load_tokenizer(
+        args.tokenizer_type, args.vocab_file, args.vocab_model_file)
     print('Loaded tokenizer')
 
     # Because tokenizer_type is a part of the feature file name,
     # new features will be generated for every tokenizer type.
     # tokenizer_name = output_dir_to_tokenizer_name(args.output_dir)
-    file_train = os.path.join(args.data_dir, 'train.json')
-    file_dev = os.path.join(args.data_dir, 'dev.json')
+    file_train = Path(args.train_dir, 'train.json')
+    file_dev = Path(args.dev_dir, 'dev.json')
     file_train_examples, file_train_features = get_filename_examples_and_features(
-        'train', args.data_dir, args, tokenizer_name=args.tokenizer_name)
+        'train', args.train_dir, args, tokenizer_name=args.tokenizer_name)
     file_dev_examples, file_dev_features = get_filename_examples_and_features(
-        'dev', args.data_dir, args, tokenizer_name=args.tokenizer_name)
+        'dev', args.dev_dir, args, tokenizer_name=args.tokenizer_name)
     # Generate train examples and features
     print('Generating train data:')
     print(f'  file_examples: {file_train_examples}')
@@ -495,10 +498,12 @@ def train(args):
         weight_decay_rate=args.weight_decay_rate)
 
     # Train and evaluation
-    train_data = features_to_dataset(train_features, is_training=True,
-                                     two_level_embeddings=args.two_level_embeddings,
-                                     avg_char_tokens=args.avg_char_tokens)
-    train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
+    train_data = features_to_dataset(
+        train_features, is_training=True,
+        two_level_embeddings=args.two_level_embeddings,
+        avg_char_tokens=args.avg_char_tokens)
+    train_dataloader = DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=True)
 
     print('*** Start Training ***')
     print(f'num epochs = {args.epochs}')
@@ -533,10 +538,18 @@ def train(args):
             (input_ids, input_mask, segment_ids, start_positions, end_positions,
                 token_ids, pos_left, pos_right) = tensors
 
-            loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions,
-                            token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                            use_token_embeddings=args.two_level_embeddings,
-                            avg_char_tokens=args.avg_char_tokens)
+            loss = model(
+                input_ids, 
+                segment_ids, 
+                input_mask, 
+                start_positions, 
+                end_positions,
+                token_ids=token_ids, 
+                pos_left=pos_left, 
+                pos_right=pos_right,
+                use_token_embeddings=args.two_level_embeddings,
+                avg_char_tokens=args.avg_char_tokens,
+            )
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
             # total_loss += loss.item()
@@ -563,7 +576,7 @@ def train(args):
                 ckpt_dir.mkdir(exist_ok=True)
                 dev_acc, dev_f1 = evaluate(
                     model, args, 
-                    file_data=Path(args.data_dir, 'dev.json'),
+                    file_data=Path(args.dev_dir, 'dev.json'),
                     examples=dev_examples, 
                     features=dev_features, 
                     device=device, 
@@ -639,7 +652,7 @@ def test(args):
     # Prepare files
     output_dir = Path(args.output_dir, str(args.seed))
     test_dir = output_dir / args.test_name
-    data_dir = Path(args.data_dir, args.test_name)
+    data_dir = Path(args.test_dir, args.test_name)
     assert output_dir.exists()
     assert args.batch_size > 0, 'Batch size must be positive'
 
@@ -649,7 +662,7 @@ def test(args):
     print("device: {} n_gpu: {}".format(device, n_gpu))
 
     print('SEED: ' + str(args.seed))
-    set_seed(args.seed, n_gpu)
+    set_seed(args.seed)
 
     # Prepare model
     # best_ckpt = output_dir / modeling.FILENAME_BEST_MODEL
@@ -658,15 +671,6 @@ def test(args):
     else:
         best_ckpt = get_best_ckpt(output_dir)
     model = load_model(args.config_file, best_ckpt).to(device)
-    # print('Preparing model from checkpoint {}'.format(best_ckpt))
-    # config = modeling.BertConfig.from_json_file(args.config_file)
-    # if config.vocab_size % 8 != 0:
-    #     config.vocab_size += 8 - (config.vocab_size % 8)
-    # model = modeling.BertForQuestionAnswering(config)
-    # modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-    # state_dict = torch.load(best_ckpt, map_location='cpu')['model']
-    # model.load_state_dict(state_dict, strict=False)
-    # model.to(device)
 
     # Tokenizer
     tokenizer = load_tokenizer(
