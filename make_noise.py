@@ -108,7 +108,7 @@ TEXT_KEYS = ['sentence1', 'sentence2']
 
 
 def change_pinyin(orig_data, ratio):
-    random.seed(2021)
+    # random.seed(2021)
     data = []
     ## pinyin substitute
     changed_chars = 0
@@ -126,7 +126,7 @@ def change_pinyin(orig_data, ratio):
 
 
 def change_wubi(orig_data, ratio=1):
-    random.seed(2021)
+    # random.seed(2021)
     data = []
     ## wubi substitute
     changed_chars = 0
@@ -157,31 +157,31 @@ def _dump_json(data, file):
 
 if __name__ == '__main__':
     dataset = 'afqmc'
+    
+    random.seed(0)
 
-    FILE_ORIG_DATA = f'datasets/{dataset}/split/test.json'
-    DIR_DEST_DATA = f'datasets/{dataset}/noisy'
+    FILE_ORIG_DATA = f'datasets/{dataset}/split/train.json'
+    DIR_DEST_DATA = f'datasets/{dataset}/noisy_da'
     orig_data = _read_json(FILE_ORIG_DATA)
     os.makedirs(DIR_DEST_DATA, exist_ok=True)
+    
     # from tokenization import CommonZhNoIndexTokenizer
     # vocab_file = 'tokenizers/wubi_no_index_22675.vocab'
     # vocab_model_file = vocab_file.replace('.vocab', '.model')
     # tokenizer = CommonZhNoIndexTokenizer(vocab_file, vocab_model_file)
 
-    def gen_phonetic_data():
-        for ratio in [
-            0.0, 
-            # 0.1, 0.2, 0.3, 0.4, 0.5,
-            ]:
+    def gen_phonetic_data(ratios):
+        for ratio in ratios:
             dir_phonetic = DIR_DEST_DATA + '/phonetic_' + str(int(ratio * 100))
             print(dir_phonetic)
             os.makedirs(dir_phonetic, exist_ok=True)
-            file_phonetic = dir_phonetic + '/test.json'
+            file_phonetic = dir_phonetic + '/.json'
             data = change_pinyin(orig_data, ratio=ratio)
             print(f'Dumping to {file_phonetic}')
             _dump_json(data, file_phonetic)
 
-    def gen_glyph_data():
-        for ratio in [0.5, 1.0]:
+    def gen_glyph_data(ratios):
+        for ratio in ratios:
             print("ratio:", ratio)
             dir_glyph = DIR_DEST_DATA + '/glyph_' + str(int(ratio * 100))
             print(dir_glyph)
@@ -191,6 +191,13 @@ if __name__ == '__main__':
             _dump_json(data, file_glyph)
             print('')
 
-    # gen_glyph_data()
-    gen_phonetic_data()
+    gen_glyph_data([])
+    gen_phonetic_data([
+            # 0.0, 
+            # 0.1, 
+            # 0.2, 
+            # 0.3, 
+            # 0.4, 
+            0.5,
+    ])
 

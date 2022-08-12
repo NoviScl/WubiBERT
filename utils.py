@@ -126,7 +126,7 @@ def output_dir_to_tokenizer_name(output_dir):
     return None
 
 
-def set_seed(seed):
+def set_seed(seed: int):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)

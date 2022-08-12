@@ -39,7 +39,7 @@ vocab_name="pinyin_no_index_22675"
 # vocab_name="pypinyin_22675_notone_noindex_nosep"
 
 
-for seed in {1..1}
+for seed in {4..5}
 do
     # test_name="test_clean"
     # test_dir="datasets/realtypo/${task}/${test_name}"

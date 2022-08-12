@@ -450,20 +450,19 @@ def train(args):
     del train_examples  # Only need examples for predictions
     print('Done generating data')
 
-    args.batch_size = int(args.batch_size / args.grad_acc_steps)
+    # args.batch_size = int(args.batch_size / args.grad_acc_steps)
 
-    steps_per_ep = len(train_features) // args.batch_size
-    dev_steps_per_epoch = len(dev_features) // args.batch_size
-    if len(train_features) % args.batch_size != 0:
-        steps_per_ep += 1
-    if len(dev_features) % args.batch_size != 0:
-        dev_steps_per_epoch += 1
+    update_size = args.batch_size * args.grad_acc_steps
+    steps_per_ep = len(train_features) // update_size
+    dev_steps_per_epoch = len(dev_features) // update_size
+    # if len(train_features) % args.batch_size != 0:
+    #     steps_per_ep += 1
+    # if len(dev_features) % args.batch_size != 0:
+    #     dev_steps_per_epoch += 1
     total_steps = steps_per_ep * args.epochs
 
-    print('steps per epoch: ' + str(steps_per_ep))
-    print('total steps: ' + str(total_steps))
-    print('warmup steps: ' + str(int(args.warmup_rate * total_steps)))
-
+    print(f'steps per epoch: {steps_per_ep}')
+    print(f'total steps: {total_steps}')
 
     optimizer = get_optimizer(
         model=model,
@@ -487,6 +486,7 @@ def train(args):
     print(f'num epochs = {args.epochs}')
     print(f'steps for epoch = {steps_per_ep}')
     print(f'batch size = {args.batch_size}')
+    print(f'grad acc = {args.grad_acc_steps}')
     print(f'num train features = {len(train_features)}')
     print(f'num dev features = {len(dev_features)}')
 
