@@ -1,5 +1,4 @@
 # coding=utf-8
-
 import argparse
 from pathlib import Path
 import collections
@@ -10,15 +9,13 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 
 import modeling
-from tokenization import (
-    ALL_TOKENIZERS,
-)
 from optimization import get_optimizer
 from utils import (
     json_load_by_line, 
     json_save_by_line,
     get_device, 
     set_seed,
+    load_tokenizer,
 )
 
 from mrc.preprocess.cmrc2018_evaluate import get_eval
@@ -358,12 +355,6 @@ def load_model(config_file: str, init_ckpt: str):
     state_dict = torch.load(init_ckpt, map_location='cpu')
     model.load_state_dict(state_dict['model'], strict=False)
     return model
-
-
-def load_tokenizer(tok_type: str, vocab_file: str, vocab_model_file: str):
-    print('Loading tokenizer...')
-    return ALL_TOKENIZERS[tok_type](vocab_file, vocab_model_file)
-    print('Loaded tokenizer')
 
 
 def get_best_ckpt(output_dir: Path) -> Path:

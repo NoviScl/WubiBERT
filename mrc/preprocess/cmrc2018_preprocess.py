@@ -87,6 +87,7 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
 
 def json2features(input_file, output_files, tokenizer, is_training=False, repeat_limit=3, max_query_length=64,
                   max_seq_length=512, doc_stride=128):
+    raise NotImplementedError
     with open(input_file, 'r') as f:
         train_data = json.load(f)
         train_data = train_data['data']
@@ -468,11 +469,6 @@ def read_cmrc_examples(input_file, two_level_embeddings, has_labels=True):
             if c != SPIECE_UNDERLINE:
                 char_to_word_offset.append(len(doc_tokens) - 1)
 
-        # for qas in para['qas']:
-        # qid = qas['id']
-        # ques_text = qas['question']
-        # ans_text = qas['answers'][0]['text']
-        
         # For training, learn to output first answer only.
         ques_text = query['question']
         ans_text = answers[0]['text']
@@ -517,88 +513,6 @@ def read_cmrc_examples(input_file, two_level_embeddings, has_labels=True):
             'start_position': start_position_final,
             'end_position': end_position_final})
     return examples, mis_match
- 
- 
- 
-    # for article in tqdm(train_data):
-    # 	for para in article['paragraphs']:
-    # 		context = para['context']
-    # 		if two_level_embeddings:
-    # 			context = context.replace('\u200b', '')
-    # 			context = context.replace(u'\xa0', u'')
-    # 			# Adjust answer position accordingly
-    # 			for i, qas in enumerate(para['qas']):
-    # 				ans_text = qas['answers'][0]['text']
-    # 				ans_start = qas['answers'][0]['answer_start']
-    # 				if ans_text != context[ans_start:ans_start + len(ans_text)]:
-    # 					lo = None
-    # 					for offset in range(-3, 4):
-    # 						lo = ans_start + offset
-    # 						if context[lo:lo+len(ans_text)] == ans_text:
-    # 							break
-    # 					para['qas'][i]['answers'][0]['answer_start'] = lo
-
-    # 		context_chs = _tokenize_chinese_chars(context)
-    # 		doc_tokens = []
-    # 		char_to_word_offset = []
-    # 		prev_is_whitespace = True
-    # 		for c in context_chs:
-    # 			if is_whitespace(c):
-    # 				prev_is_whitespace = True
-    # 			else:
-    # 				if prev_is_whitespace:
-    # 					doc_tokens.append(c)
-    # 				else:
-    # 					doc_tokens[-1] += c
-    # 				prev_is_whitespace = False
-    # 			if c != SPIECE_UNDERLINE:
-    # 				char_to_word_offset.append(len(doc_tokens) - 1)
-
-    # 		for qas in para['qas']:
-    # 			qid = qas['id']
-    # 			ques_text = qas['question']
-    # 			ans_text = qas['answers'][0]['text']
-
-    # 			start_position_final = None
-    # 			end_position_final = None
-    # 			# if is_training:
-    # 			if True:
-    # 				count_i = 0
-    # 				start_position = qas['answers'][0]['answer_start']
-
-    # 				end_position = start_position + len(ans_text) - 1
-    # 				repeat_limit = 3
-    # 				while context[start_position:end_position + 1] != ans_text and count_i < repeat_limit:
-    # 					start_position -= 1
-    # 					end_position -= 1
-    # 					count_i += 1
-
-    # 				while context[start_position] == " " or context[start_position] == "\t" or \
-    # 						context[start_position] == "\r" or context[start_position] == "\n":
-    # 					start_position += 1
-
-    # 				start_position_final = char_to_word_offset[start_position]
-    # 				end_position_final = char_to_word_offset[end_position]
-
-    # 				if doc_tokens[start_position_final] in {"。", "，", "：", ":", ".", ","}:
-    # 					start_position_final += 1
-
-    # 				actual_text = "".join(doc_tokens[start_position_final:(end_position_final + 1)])
-    # 				cleaned_answer_text = "".join(tokenization.whitespace_tokenize(ans_text))
-
-    # 				if actual_text != cleaned_answer_text:
-    # 					print(actual_text, 'V.S', cleaned_answer_text)
-    # 					mis_match += 1
-    # 					# ipdb.set_trace()
-
-    # 			examples.append({'doc_tokens': doc_tokens,
-    # 							 'orig_answer_text': ans_text,
-    # 							 'qid': qid,
-    # 							 'question': ques_text,
-    # 							 'answer': ans_text,
-    # 							 'start_position': start_position_final,
-    # 							 'end_position': end_position_final})
-    # return examples, mis_match
 
 
 def get_subchar_pos(tokens, subchars):
@@ -646,11 +560,6 @@ def convert_examples_to_features_twolevel(
     for (example_index, example) in enumerate(tqdm(examples)):
         question = example['question']
         query_tokens = tokenizer.tokenize(question)
-        # Subchars (technically, it's subwords)
-        # query_subchars = []
-        # for c in question:
-        #     query_subchars += tokenizer.tokenize(c)
-
         query_tokens = query_tokens[:max_query_length]  # Truncate too long questions
 
         doc_tokens = example['doc_tokens']

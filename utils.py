@@ -243,3 +243,8 @@ def auto_tokenizer(name):
     vocab_file = consts.ALL_VOCAB_FILES[name]
     model_file = vocab_file.replace('.vocab', '.model')
     return ALL_TOKENIZERS[tokenizer_type](vocab_file, model_file)
+
+
+def load_tokenizer(tok_type: str, vocab_file: str, vocab_model_file: str):
+    print(f'Loading {tok_type} tokenizer...')
+    return ALL_TOKENIZERS[tok_type](vocab_file, vocab_model_file)
