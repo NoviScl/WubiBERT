@@ -993,7 +993,8 @@ def convert_examples_to_features(
     doc_stride: int=128,
     two_level_embeddings: bool=False,
     include_long_tokens: bool=False,
-    avg_char_tokens: bool=None,   # Will be ignored
+    is_training: bool=True,         # NOTE: This might not work if set to False
+    avg_char_tokens: bool=None,     # Will be ignored
     ):
     if two_level_embeddings:
         return convert_examples_to_features_twolevel(
@@ -1005,11 +1006,9 @@ def convert_examples_to_features(
             include_long_tokens=include_long_tokens,
         )
 
-    is_training = True # TODO: Just remove this parameter altogether?
-
     features = []
     unique_id = 1000000000
-    for (example_index, example) in enumerate(tqdm(examples)):
+    for (ex_idx, example) in enumerate(examples):
         query_tokens = tokenizer.tokenize(example['question'])
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
@@ -1039,6 +1038,7 @@ def convert_examples_to_features(
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
 
+        # Iterate different spans of the context to generate multiple features.
         doc_spans = []
         _DocSpan = collections.namedtuple("DocSpan", ["start", "length"])
         start_offset = 0
@@ -1093,7 +1093,6 @@ def convert_examples_to_features(
 
             start_position = None
             end_position = None
-            is_training = True
             if is_training:
                 # For training, if our document chunk does not contain an annotation
                 # we throw it out, since there is nothing to predict.
@@ -1116,7 +1115,7 @@ def convert_examples_to_features(
                         end_position = tok_end_position - doc_start + doc_offset
 
             features.append({'unique_id': unique_id,
-                             'example_index': example_index,
+                             'example_index': ex_idx,
                              'doc_span_index': doc_span_index,
                              'tokens': tokens,
                              'token_to_orig_map': token_to_orig_map,
@@ -1127,6 +1126,10 @@ def convert_examples_to_features(
                              'start_position': start_position,
                              'end_position': end_position})
             unique_id += 1
+            
+            # Log progress
+            if ex_idx % 2000 == 0:
+                print(f'Processed {ex_idx} / {len(examples)} examples')
 
     return features
  
