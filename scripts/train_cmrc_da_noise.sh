@@ -48,6 +48,8 @@ do
     train_cmd+=" --train_dir ${data_dir}"
     train_cmd+=" --dev_dir ${data_dir}"
     # train_cmd+=" --two_level_embeddings"
+    train_cmd+=" --batch_size 16"
+    train_cmd+=" --grad_acc_steps 8"
     train_cmd+=" --epochs 4"
 
     logfile="${output_dir}/train.log"
