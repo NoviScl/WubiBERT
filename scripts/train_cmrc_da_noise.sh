@@ -1,4 +1,6 @@
 #!/bin/bash
+#SBATCH -G 1
+#SBATCH -p rtx2080
 
 # This scripts trains a model on CMRC with synthetic noise as DA, and tests on READIN.
 
@@ -22,10 +24,10 @@ vocab_name="bert_chinese_uncased_22675"
 
 data_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"
 
-for seed in {2..2}
+for seed in {0..2}
 do
     ckpt="/home/chenyingfa/models/${model_name}.pt"
-    output_dir="logs/realtypo/cmrc_da_noise/${model_name}/${seed}"
+    output_dir="logs/realtypo/cmrc_da_noise/${model_name}_seed${seed}"
 
     # Global args
     cmd="python3 run_cmrc.py"
