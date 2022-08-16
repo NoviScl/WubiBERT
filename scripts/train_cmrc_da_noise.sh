@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This scripts trains a model on CMRC with synthetic noise as DA, and tests on READIN.
+
 
 # Model
 model_name="char"
@@ -48,7 +50,7 @@ do
 
     logfile="${output_dir}/train.log"
     mkdir -p $output_dir
-    $train_cmd | tee $logfile
+    # $train_cmd | tee $logfile
     
     # Testing
     test_names=""
@@ -57,7 +59,7 @@ do
     test_names+=" test_noisy_asr_1 test_noisy_asr_2 test_noisy_asr_3"
     for test_name in $test_names
     do
-        cmd+=" --test_ckpt ${output_dir}/ckpt-1567/ckpt.pt"
+        # cmd+=" --test_ckpt ${output_dir}/ckpt-1567/ckpt.pt"
         test_dir="datasets/realtypo/cmrc/${test_name}"  # READIN noise
 
         test_cmd="${cmd}"

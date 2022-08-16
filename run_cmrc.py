@@ -382,7 +382,7 @@ def get_best_ckpt(output_dir: Path) -> Path:
 
 def train(args):
     # Prepare files
-    output_dir = Path(args.output_dir, str(args.seed))
+    output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
 
     # Save arguments
@@ -626,7 +626,7 @@ def test(args):
     print(json.dumps(vars(args), indent=4))
 
     # Prepare files
-    output_dir = Path(args.output_dir, str(args.seed))
+    output_dir = Path(args.output_dir)
     test_dir = output_dir / args.test_name
     data_dir = Path(args.test_dir)
     assert output_dir.exists()
