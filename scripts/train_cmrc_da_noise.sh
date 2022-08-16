@@ -10,9 +10,9 @@ model_name="char"
 tok_type="BertZh"
 vocab_name="bert_chinese_uncased_22675"
 
-model_name="raw"
-tok_type="RawZh"
-vocab_name="raw_zh_22675"
+# model_name="raw"
+# tok_type="RawZh"
+# vocab_name="raw_zh_22675"
 
 # model_name="pinyin"
 # tok_type="CommonZh"
@@ -24,10 +24,10 @@ vocab_name="raw_zh_22675"
 
 data_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
 
-for seed in {2..2}
+for seed in {0..2}
 do
     ckpt="/home/chenyingfa/models/${model_name}.pt"
-    output_dir="results/realtypo/cmrc_da_noise/${model_name}/${seed}"
+    output_dir="results/realtypo/cmrc_da_noise/${model_name}_seed${seed}"
 
     # Global args
     cmd="python3 run_cmrc.py"
@@ -50,6 +50,7 @@ do
     # train_cmd+=" --two_level_embeddings"
     train_cmd+=" --batch_size 16"
     train_cmd+=" --grad_acc_steps 8"
+    train_cmd+=" --log_interval 10"
     train_cmd+=" --epochs 4"
 
     logfile="${output_dir}/train.log"

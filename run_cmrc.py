@@ -17,7 +17,6 @@ from utils import (
     set_seed,
     load_tokenizer,
 )
-
 from mrc.preprocess.cmrc2018_evaluate import get_eval
 from mrc.preprocess.cmrc2018_output import write_predictions
 from mrc.preprocess.cmrc2018_preprocess import (
@@ -36,7 +35,6 @@ def evaluate(
     epoch: int, 
     output_dir: Path,
     ):
-    print("*** Evaluation ***", flush=True)
     RawResult = collections.namedtuple(
         "RawResult",
         ["unique_id", "start_logits", "end_logits"])
@@ -93,7 +91,6 @@ def evaluate(
     res = get_eval(file_data, file_preds)
     result_file = output_dir / 'result.json'
     json.dump(res, open(result_file, 'w'))
-    print('*** Evaluation finished ***', flush=True)
     model.train()
     return res['em'], res['f1']
 
@@ -136,6 +133,7 @@ def parse_args():
     p.add_argument('--test_name', default='test_clean')
     p.add_argument('--tokenizer_name', default='XXX')
     p.add_argument('--test_ckpt')
+    p.add_argument('--log_interval', type=int)
 
     return p.parse_args()
 
@@ -477,7 +475,6 @@ def train(args):
     # 存一个全局最优的模型
     global_step = 1
     eval_interval = steps_per_ep // 4
-    log_interval = 50
 
     train_losses = []
     # dev_acc_history = []
@@ -522,7 +519,7 @@ def train(args):
                 optimizer.zero_grad()
                 global_step += 1
 
-            if global_step % log_interval == 0:
+            if global_step % args.log_interval == 0:
                 train_state = {
                     'step': global_step,
                     'ep': global_step / steps_per_ep,
@@ -534,6 +531,9 @@ def train(args):
             if global_step % eval_interval == 0:
                 ckpt_dir = output_dir / f'ckpt-{global_step}'
                 ckpt_dir.mkdir(exist_ok=True)
+                
+                print('*** Start evaluation ***', flush=True)
+                
                 dev_acc, dev_f1 = evaluate(
                     model, args, 
                     file_data=Path(args.dev_dir, 'dev.json'),
@@ -560,10 +560,12 @@ def train(args):
                     {"model": model_to_save.state_dict()},
                     ckpt_file,
                 )
+                print('*** Evaluation finished ***', flush=True)
                 
                 # Save train loss
                 train_loss_file = output_dir / 'train_loss.json'
                 json.dump(train_losses, open(train_loss_file, 'w'), indent=2)
+                
 
             global_step += 1
 
@@ -652,6 +654,8 @@ def test(args):
 def main(args):
     # Sanity check
     assert args.grad_acc_steps > 0
+    assert args.batch_size > 0
+    assert args.epochs > 0
     
     if args.do_train:
         train(args)
