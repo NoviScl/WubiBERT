@@ -66,13 +66,18 @@ def main():
     noisy_data = load(data_dir / 'test_noisy_keyboard_1/test.json', n)
     model_name = 'raw'
     model_names = []
-    preserved_ids = []
     for model_name in TOK_INFO:
+    # for model_name in ['pypinyin']:
         tokenizer = get_tokenizer(model_name)
         clean_tokens = tokenize(tokenizer, clean_data)
         noisy_tokens = tokenize(tokenizer, noisy_data)
-        # print(clean_tokens)
-        # print(noisy_tokens)
+        
+        example_id = "cmrc2018_dev_DEV_1041_QUERY_3"
+        # print(clean_tokens[example_id])
+        # print(noisy_tokens[example_id])
+        # print(clean_tokens[example_id] == noisy_tokens[example_id])
+        
+        preserved_ids = []
         ratio_sum = 0
         for key in clean_tokens:
             clean = clean_tokens[key]
@@ -86,9 +91,9 @@ def main():
         # print(model_name)
         model_names.append(model_name)
         avg_ratio = ratio_sum / len(clean_tokens)
-        print(f'{100*avg_ratio:.2f}')
+        print(f'{100*avg_ratio:.2f} {len(preserved_ids) / len(clean_tokens)}')
         
-        file_preserved = f'cmrc_debug/preserved_{model_name}.json'
+        file_preserved = f'cmrc_debug/preserved_tokens_{model_name}.json'
         json.dump(preserved_ids, open(file_preserved, 'w'), ensure_ascii=False, indent=2)
     print(model_names)
 
