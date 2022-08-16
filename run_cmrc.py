@@ -1,5 +1,4 @@
 # coding=utf-8
-
 import argparse
 from pathlib import Path
 import collections
@@ -10,15 +9,13 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 
 import modeling
-from tokenization import (
-    ALL_TOKENIZERS,
-)
 from optimization import get_optimizer
 from utils import (
     json_load_by_line, 
     json_save_by_line,
     get_device, 
     set_seed,
+    load_tokenizer,
 )
 
 from mrc.preprocess.cmrc2018_evaluate import get_eval
@@ -360,12 +357,6 @@ def load_model(config_file: str, init_ckpt: str):
     return model
 
 
-def load_tokenizer(tok_type: str, vocab_file: str, vocab_model_file: str):
-    print('Loading tokenizer...')
-    return ALL_TOKENIZERS[tok_type](vocab_file, vocab_model_file)
-    print('Loaded tokenizer')
-
-
 def get_best_ckpt(output_dir: Path) -> Path:
     max_acc = float('-inf')
     best_ckpt = None
@@ -450,15 +441,8 @@ def train(args):
     del train_examples  # Only need examples for predictions
     print('Done generating data')
 
-    # args.batch_size = int(args.batch_size / args.grad_acc_steps)
-
     update_size = args.batch_size * args.grad_acc_steps
     steps_per_ep = len(train_features) // update_size
-    dev_steps_per_epoch = len(dev_features) // update_size
-    # if len(train_features) % args.batch_size != 0:
-    #     steps_per_ep += 1
-    # if len(dev_features) % args.batch_size != 0:
-    #     dev_steps_per_epoch += 1
     total_steps = steps_per_ep * args.epochs
 
     print(f'steps per epoch: {steps_per_ep}')
@@ -582,36 +566,6 @@ def train(args):
                 json.dump(train_losses, open(train_loss_file, 'w'), indent=2)
 
             global_step += 1
-
-        # train_loss = total_loss / steps_per_ep
-        # train_loss_history.append(train_loss)
-        # dev_acc_history.append(dev_acc)
-        # dev_f1_history.append(dev_f1)
-        # print(f'train_loss = {train_loss}, dev_acc = {dev_acc}, dev_f1 = {dev_f1}')
-
-        # # Save all loss and acc
-        # with open(filename_scores, 'w') as f:
-        #     f.write(f'epoch\ttrain_loss\tdev_acc\n')
-        #     for i in range(ep+1):
-        #         train_loss = train_loss_history[i]
-        #         dev_acc = dev_acc_history[i]
-        #         f.write(f'{i}\t{train_loss}\t{dev_acc}\n')
-
-        # # Save best model
-        # if len(dev_acc_history) == 0 or dev_acc_history[-1] == max(dev_acc_history):
-        #     best_model_filename = output_dir / modeling.FILENAME_BEST_MODEL
-        #     copyfile(model_filename, best_model_filename)
-        #     print('New best model saved')
-
-    # file_scores_backup = filename_scores.replace('.txt', '_backup.txt')
-    # copyfile(filename_scores, file_scores_backup)
-    # mean_acc = sum(dev_acc_history) / len(dev_acc_history)
-    # max_acc = max(dev_acc_history)
-    # mean_f1 = sum(dev_f1_history) / len(dev_f1_history)
-    # max_f1 = max(dev_f1_history)
-
-    # print(f'Mean F1: {mean_f1} Mean EM: {mean_acc}')
-    # print(f'Max F1: {max_f1} Max EM: {max_acc}')
 
     # release the memory
     del model
