@@ -653,12 +653,6 @@ def convert_examples_to_features_twolevel(
 
         query_tokens = query_tokens[:max_query_length]  # Truncate too long questions
 
-        # query_subchar_pos = get_subchar_pos(query_tokens, query_subchars)
-        # if len(query_subchars) > max_query_length:
-            # query_tokens = query_tokens[0:max_query_length]
-        # query_subchars = query_subchars[:max_query_length]
-        # query_subchar_pos = query_subchar_pos[:max_query_length]
-
         doc_tokens = example['doc_tokens']
 
         tok_to_orig_index = []
@@ -706,9 +700,6 @@ def convert_examples_to_features_twolevel(
             # 	print(i, a[i], ord(a[i]), b[i], ord(b[i]))
             exit()
 
-        # print(doc_tokens)
-        # exit()
-
         tok_start_position = None
         tok_end_position = None
         if is_training:
@@ -720,35 +711,6 @@ def convert_examples_to_features_twolevel(
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
                 example['orig_answer_text'])
-
-        # text = example['text']
-        # doc_index_char_to_subchar = []  # index of the beginning subchar of each character
-        # doc_index_subchar_to_char = []  # index of each subchar to the char that contains it
-        # # Get subchars
-        # doc_subchars = []
-        # for i, c in enumerate(text):
-        #     doc_index_char_to_subchar.append(len(doc_subchars))
-        #     this_subchars = tokenizer.tokenize(c)
-        #     for subchar in this_subchars:
-        #         doc_index_subchar_to_char.append(i)
-        #         doc_subchars.append(subchar)
-        
-        # # Get tokens
-        # doc_tokens = tokenizer.tokenize(text)
-        # doc_subchar_pos = get_subchar_pos(doc_tokens, doc_subchars)
-        # doc_subchar_pos.append(len(doc_tokens))
-
-        # start_pos = None  # start index of answer in subchars
-        # end_pos = None    # end index of answer in subchars
-
-        # start_pos = doc_index_char_to_subchar[example['start_position']]  # 原来token到新token的映射，这是新token的起点
-        # if example['end_position'] < len(text) - 1:
-        # 	end_pos = doc_index_char_to_subchar[example['end_position'] + 1] - 1
-        # else:
-        # 	end_pos = len(doc_subchars) - 1
-        # (start_pos, end_pos) = _improve_answer_span(
-        #     doc_subchars, start_pos, end_pos, tokenizer,
-        #     example['orig_answer_text'])
 
         tok_start_position = None
         tok_end_position = None
@@ -803,15 +765,6 @@ def convert_examples_to_features_twolevel(
             segment_ids.append(0)
             token_to_long_index = [-1] * len(tokens)  # Map index of token to long_tokens
 
-            # subchars = [cls_token] + query_subchars + [sep_token]
-            # tokens = [cls_token] + query_tokens + [sep_token]
-            # segment_ids = [0]
-            # subchar_pos = [0] + [x+1 for x in query_subchar_pos] + [len(tokens) - 1]
-            # segment_ids = [0] * len(subchars)
-            
-            # index_subchar_to_char = {}
-            # subchar_is_max_context = {}
-
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
                 token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
@@ -835,43 +788,6 @@ def convert_examples_to_features_twolevel(
             for i in range(len(token_to_long_index)):
                 if token_to_long_index[i] != -1:
                     token_to_long_index[i] -= long_index_lo
-
-            # print(this_long_tokens)
-            # print(token_to_long_index, len(token_to_long_index))
-            # print(tokens, len(tokens))
-            # exit()
-
-            # subchar_pos_offset = len(tokens)
-            # right_pos = None
-            # for i in range(doc_span.length):
-            # 	split_subchar_index = doc_span.start + i
-            # 	# token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
-            # 	index_subchar_to_char[len(subchars)] = doc_index_subchar_to_char[split_subchar_index]
-            # 	is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_subchar_index)
-            # 	# token_is_max_context[len(tokens)] = is_max_context
-            # 	subchar_is_max_context[len(subchars)] = is_max_context
-            # 	# tokens.append(all_doc_tokens[split_token_index])
-            # 	subchars.append(doc_subchars[split_subchar_index])
-            # 	segment_ids.append(1)
-            # 	subchar_pos.append(len(tokens))
-
-            # 	# Add all tokens that overlap with this subchar
-            # 	prev_right_pos = right_pos if right_pos is not None else doc_span.start
-            # 	# left_pos = doc_subchar_pos[split_subchar_index]
-            # 	right_pos = doc_subchar_pos[split_subchar_index + 1]
-            # 	for token_index in range(prev_right_pos, right_pos):
-            # 		tokens.append(doc_tokens[token_index])
-            # subchars.append(sep_token)
-            # tokens.append(sep_token)
-            # subchar_pos.append(len(tokens) - 1)
-            # segment_ids.append(1)
-
-            # Adjust start_pos and end_pos according to prefixed query
-            # start_pos += len(query_subchars) + 2
-            # end_pos += len(query_subchars) + 2
-
-            # input_ids = tokenizer.convert_tokens_to_ids(subchars)
-            # token_ids = tokenizer.convert_tokens_to_ids(tokens)
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             token_ids = tokenizer.convert_tokens_to_ids(long_tokens)
