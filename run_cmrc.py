@@ -474,7 +474,7 @@ def train(args):
 
     # 存一个全局最优的模型
     global_step = 1
-    eval_interval = steps_per_ep // 4
+    eval_interval = steps_per_ep // 2
 
     train_losses = []
     # dev_acc_history = []
