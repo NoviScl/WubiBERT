@@ -14,13 +14,13 @@ model_name="raw"
 tok_type="RawZh"
 vocab_name="raw_zh_22675"
 
-# model_name="pinyin"
-# tok_type="CommonZh"
-# vocab_name="pinyin_zh_22675"
+model_name="pinyin"
+tok_type="CommonZh"
+vocab_name="pinyin_zh_22675"
 
-# model_name="pinyin_no_index"
-# tok_type="CommonZhNoIndex"
-# vocab_name="pinyin_no_index_22675"
+model_name="pinyin_no_index"
+tok_type="CommonZhNoIndex"
+vocab_name="pinyin_no_index_22675"
 
 data_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
 data_dir="datasets/realtypo/cmrc"  # Ordinary training data

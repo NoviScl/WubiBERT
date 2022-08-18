@@ -440,11 +440,8 @@ def train(args):
     print('Done generating data')
 
     update_size = args.batch_size * args.grad_acc_steps
-    steps_per_ep = len(train_features) // update_size
+    steps_per_ep = len(train_features) // args.batch_size
     total_steps = steps_per_ep * args.epochs
-
-    print(f'steps per epoch: {steps_per_ep}')
-    print(f'total steps: {total_steps}')
 
     optimizer = get_optimizer(
         model=model,
@@ -464,23 +461,23 @@ def train(args):
     train_dataloader = DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True)
 
+
+    global_step = 1
+    train_losses = []
+    dev_history = []
+    train_start_time = time()
+    eval_interval = steps_per_ep // 2
+    
     print('*** Start Training ***')
     print(f'num epochs = {args.epochs}')
+    print(f'eval interval = {eval_interval}')
+    print(f'log interval = {args.log_interval}')
     print(f'steps for epoch = {steps_per_ep}')
+    print(f'total steps = {total_steps}')
     print(f'batch size = {args.batch_size}')
     print(f'grad acc = {args.grad_acc_steps}')
     print(f'num train features = {len(train_features)}')
     print(f'num dev features = {len(dev_features)}')
-
-    # 存一个全局最优的模型
-    global_step = 1
-    eval_interval = steps_per_ep // 2
-
-    train_losses = []
-    # dev_acc_history = []
-    # dev_f1_history = []
-    dev_history = []
-    train_start_time = time()
 
     for ep in range(args.epochs):
         print(f'*** Training Epoch {ep} ***')
