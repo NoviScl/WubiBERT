@@ -12,6 +12,7 @@ ALL_VOCAB_FILES = {
     'zhuyin': 'tokenizers/zhuyin_zh_22675.vocab', 
     'raw': 'tokenizers/raw_zh_22675.vocab', 
     'bert': 'tokenizers/bert_chinese_uncased_22675.vocab', 
+    'char': 'tokenizers/bert_chinese_uncased_22675.vocab', 
     'pinyin_concat_wubi': 'tokenizers/pinyin_concat_wubi_22675.vocab',
     'byte': 'tokenizers/byte_22675.vocab',
     
@@ -35,6 +36,7 @@ TOKENIZER_TYPES = {
     'zhuyin': 'CommonZh',
     'raw': 'RawZh',
     'bert': 'BertZh',
+    'char': 'BertZh',
     'pinyin_no_index': 'CommonZhNoIndex',
     'wubi_no_index': 'CommonZhNoIndex',
     'pinyin_concat_wubi': 'PinyinConcatWubi',
@@ -51,6 +53,7 @@ MODEL_NAMES = [
     'zhuyin',
     'raw',
     'bert',
+    'char',
 ]
 
 

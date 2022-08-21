@@ -84,12 +84,6 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
 
 
 def read_cmrc_examples(input_file, two_level_embeddings, has_labels=True):
-    # if two_level_embeddings:
-    #     return read_cmrc_examples_twolevel(input_file, is_training)
-
-    # with open(input_file, 'r', encoding='utf8') as f:
-    # 	train_data = json.load(f)
-    # train_data = train_data['data']
     train_data = [json.loads(line) for line in open(input_file, 'r')]
 
     def _is_chinese_char(cp):

@@ -238,7 +238,7 @@ def normalize_tokenizer_name(name):
     raise ValueError("Unrecognized tokenizer name: " + name)
     
     
-def auto_tokenizer(name):
+def auto_tokenizer(name: str):
     tokenizer_type = consts.TOKENIZER_TYPES[name]
     vocab_file = consts.ALL_VOCAB_FILES[name]
     model_file = vocab_file.replace('.vocab', '.model')
