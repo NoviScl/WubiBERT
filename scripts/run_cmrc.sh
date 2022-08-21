@@ -5,25 +5,27 @@
 # This scripts trains a model on CMRC with synthetic noise as DA, and tests on READIN.
 
 # Model
-model_name="char"
-model_name="raw"
-# model_name="pinyin"
-# model_name="pinyin_no_index"
+model="char"
+model="raw"
+model="pinyin"
+model="pinyin_no_index"
 
-# data_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
-train_dir="datasets/cmrc/split"  # Ordinary training data
+# train_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
+train_dir="datasets/realtypo/cmrc"  # READIN-CMRC
+train_dir="datasets/cmrc/split"     # SCT-CMRC
 
-for seed in {0..0}
+for seed in {1..1}
 do
-    ckpt="/home/chenyingfa/models/${model_name}.pt"
-    # output_dir="results/da_noise/cmrc/${model_name}_seed${seed}"
-    output_dir="results/cmrc/${model_name}_seed${seed}"
+    ckpt="/home/chenyingfa/models/${model}.pt"
+    # output_dir="results/da_noise/cmrc/${model}_seed${seed}"
+    # output_dir="results/cmrc/${model}_twolevel_seed${seed}"
+    output_dir="results/cmrc/${model}_seed${seed}"
 
     # Global args
     cmd="python3 run_cmrc.py"
     cmd+=" --output_dir ${output_dir}"
     cmd+=" --config_file configs/bert_config_vocab22675.json"
-    cmd+=" --tokenizer_name ${model_name}"
+    cmd+=" --tokenizer_name ${model}"
     cmd+=" --seed $seed"
 
     # Training
@@ -41,7 +43,7 @@ do
 
     logfile="${output_dir}/train.log"
     mkdir -p $output_dir
-    $train_cmd | tee $logfile
+    # $train_cmd | tee $logfile
     
     # Testing
     test_names=""

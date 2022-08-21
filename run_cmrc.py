@@ -394,6 +394,7 @@ def get_best_ckpt(output_dir: Path) -> Path:
     for ckpt_dir in output_dir.glob('ckpt-*'):
         if not ckpt_dir.is_dir(): continue
         result_file = ckpt_dir / 'result.json'
+        if not result_file.exists(): continue
         result = json.load(open(result_file))
         acc = result['em']
         if acc > max_acc:
@@ -506,7 +507,7 @@ def train(args: argparse.Namespace) -> None:
     print(f'num epochs = {args.epochs}')
     print(f'eval interval = {eval_interval}')
     print(f'log interval = {args.log_interval}')
-    print(f'steps for epoch = {steps_per_ep}')
+    print(f'steps per epoch = {steps_per_ep}')
     print(f'total steps = {total_steps}')
     print(f'batch size = {args.batch_size}')
     print(f'grad acc = {args.grad_acc_steps}')
@@ -550,7 +551,6 @@ def train(args: argparse.Namespace) -> None:
             if (step + 1) % args.grad_acc_steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                global_step += 1
 
             if global_step % args.log_interval == 0:
                 train_state = {
@@ -568,7 +568,7 @@ def train(args: argparse.Namespace) -> None:
                 eval_result = evaluate(
                     model, args, 
                     data_file=Path(args.dev_dir, 'dev.json'),
-                    labels_line_by_line=False,
+                    labels_line_by_line='realtypo' in args.dev_dir,
                     examples=dev_examples, 
                     features=dev_features, 
                     device=device, 
@@ -668,7 +668,7 @@ def test(args):
         model, 
         args,
         data_file=file_data,
-        labels_line_by_line=True,
+        labels_line_by_line='realtypo' in args.test_dir,
         examples=examples,
         features=features,
         device=device,
