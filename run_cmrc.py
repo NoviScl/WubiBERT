@@ -29,7 +29,8 @@ from mrc.preprocess.cmrc2018_preprocess import (
 def evaluate(
     model: Module, 
     args: argparse.Namespace, 
-    file_data: Path, 
+    data_file: Path, 
+    labels_line_by_line: bool,
     examples: list, 
     features: list, 
     device: str, 
@@ -39,8 +40,8 @@ def evaluate(
         "RawResult",
         ["unique_id", "start_logits", "end_logits"])
     output_dir.mkdir(exist_ok=True, parents=True)
-    file_preds = output_dir / 'preds.json'
-    file_nbest = output_dir / 'nbest.json'
+    preds_file = output_dir / 'preds.json'
+    nbest_file = output_dir / 'nbest.json'
     
     dataset = features_to_dataset(
         features, 
@@ -83,7 +84,7 @@ def evaluate(
                                          start_logits=start_logits,
                                          end_logits=end_logits))
     print('*** Evaluation done ***')
-    print(f'Writing predictions to {file_preds} and {file_nbest}', flush=True)
+    print(f'Writing predictions to {preds_file} and {nbest_file}', flush=True)
     write_predictions(
         examples, 
         features, 
@@ -91,13 +92,17 @@ def evaluate(
         n_best_size=args.n_best, 
         max_answer_length=args.max_ans_length,
         do_lower_case=True, 
-        output_prediction_file=file_preds,
-        output_nbest_file=file_nbest,
+        output_prediction_file=preds_file,
+        output_nbest_file=nbest_file,
         two_level_embeddings=False,
     )
 
     # file_truth = os.path.join(args.test_dir, file_data)
-    res = get_eval(file_data, file_preds)
+    res = get_eval(
+        orig_file=data_file, 
+        pred_file=preds_file,
+        line_by_line=labels_line_by_line,
+    )
     result_file = output_dir / 'result.json'
     json.dump(res, open(result_file, 'w'))
     model.train()
@@ -562,7 +567,8 @@ def train(args: argparse.Namespace) -> None:
                 
                 eval_result = evaluate(
                     model, args, 
-                    file_data=Path(args.dev_dir, 'dev.json'),
+                    data_file=Path(args.dev_dir, 'dev.json'),
+                    labels_line_by_line=False,
                     examples=dev_examples, 
                     features=dev_features, 
                     device=device, 
@@ -661,7 +667,8 @@ def test(args):
     result = evaluate(
         model, 
         args,
-        file_data=file_data,
+        data_file=file_data,
+        labels_line_by_line=True,
         examples=examples,
         features=features,
         device=device,

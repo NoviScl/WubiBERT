@@ -74,12 +74,12 @@ def find_lcs(s1, s2):
     return s1[p - mmax:p], mmax
 
 
-def evaluate_old(ground_truth_file: dict, prediction_file: dict):
+def evaluate(truth: dict, pred_file: dict):
     f1 = 0
     em = 0
     total_count = 0
     skip_count = 0
-    for instance in ground_truth_file["data"]:
+    for instance in truth["data"]:
         # context_id   = instance['context_id'].strip()
         # context_text = instance['context_text'].strip()
         for para in instance["paragraphs"]:
@@ -89,12 +89,12 @@ def evaluate_old(ground_truth_file: dict, prediction_file: dict):
                 query_text = qas['question'].strip()
                 answers = [x["text"] for x in qas['answers']]
 
-                if query_id not in prediction_file:
+                if query_id not in pred_file:
                     # print('Unanswered question: {}\n'.format(query_id))
                     skip_count += 1
                     continue
 
-                prediction = str(prediction_file[query_id])
+                prediction = str(pred_file[query_id])
                 f1 += calc_f1_score(answers, prediction)
                 em += calc_em_score(answers, prediction)
 
@@ -104,24 +104,23 @@ def evaluate_old(ground_truth_file: dict, prediction_file: dict):
 
 
 
-def evaluate(ground_truth_file, prediction_file: dict):
-    return evaluate_old(ground_truth_file, prediction_file)  # TODO: remove on release
+def evaluate_line(truth: list, pred_file: dict):
     f1 = 0
     em = 0
     total_count = 0
     skip_count = 0
-    for qas in ground_truth_file:
+    for qas in truth:
         total_count += 1
         query_id = qas['id'].strip()
         query_text = qas['question'].strip()
         answers = [x["text"] for x in qas['answers']]
 
-        if query_id not in prediction_file:
+        if query_id not in pred_file:
             # print('Unanswered question: {}\n'.format(query_id))
             skip_count += 1
             continue
 
-        prediction = str(prediction_file[query_id])
+        prediction = str(pred_file[query_id])
         f1 += calc_f1_score(answers, prediction)
         em += calc_em_score(answers, prediction)
 
@@ -130,7 +129,7 @@ def evaluate(ground_truth_file, prediction_file: dict):
     return f1, em, total_count, skip_count
 
 
-def evaluate2(ground_truth_file, prediction_file):
+def evaluate2(truth, pred_file):
     f1 = 0
     em = 0
     total_count = 0
@@ -142,17 +141,17 @@ def evaluate2(ground_truth_file, prediction_file):
     unk_count = 0
     unk_correct = 0
 
-    for instance in ground_truth_file["data"]:
+    for instance in truth["data"]:
         for para in instance["paragraphs"]:
             for qas in para['qas']:
                 total_count += 1
                 query_id = qas['id'].strip()
-                if query_id not in prediction_file:
+                if query_id not in pred_file:
                     print('Unanswered question: {}\n'.format(query_id))
                     skip_count += 1
                     continue
 
-                prediction = str(prediction_file[query_id])
+                prediction = str(pred_file[query_id])
 
                 if len(qas['answers']) == 0:
                     unk_count += 1
@@ -210,11 +209,21 @@ def calc_em_score(answers, prediction):
     return em
 
 
-def get_eval(original_file, prediction_file):
-    # ground_truth_file = [json.loads(line) for line in open(original_file, 'r')]
-    ground_truth_file = json.load(open(original_file, 'r'))
-    prediction_file = json.load(open(prediction_file, 'r'))
-    F1, EM, TOTAL, SKIP = evaluate(ground_truth_file, prediction_file)
+def get_eval(
+    orig_file, 
+    pred_file, 
+    line_by_line: bool=False,
+    ):
+    pred_file = json.load(open(pred_file, 'r'))
+    if line_by_line:
+        truth = [
+            json.loads(line) for line in open(orig_file, 'r')]
+        result = evaluate_line(truth, pred_file)
+    else:
+        truth = json.load(open(orig_file, 'r'))
+        result = evaluate(truth, pred_file)
+
+    F1, EM, TOTAL, SKIP = result
     AVG = (EM + F1) * 0.5
     output_result = OrderedDict()
     output_result['avg'] = AVG
@@ -226,10 +235,10 @@ def get_eval(original_file, prediction_file):
     return output_result
 
 
-def get_eval_with_neg(original_file, prediction_file):
-    ground_truth_file = json.load(open(original_file, 'r'))
-    prediction_file = json.load(open(prediction_file, 'r'))
-    F1, EM, YES_ACC, NO_ACC, UNK_ACC, TOTAL, SKIP = evaluate2(ground_truth_file, prediction_file)
+def get_eval_with_neg(orig_file, pred_file):
+    truth = json.load(open(orig_file, 'r'))
+    pred_file = json.load(open(pred_file, 'r'))
+    F1, EM, YES_ACC, NO_ACC, UNK_ACC, TOTAL, SKIP = evaluate2(truth, pred_file)
     AVG = (EM + F1) * 0.5
     output_result = OrderedDict()
     output_result['AVERAGE'] = '%.3f' % AVG

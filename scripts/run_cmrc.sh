@@ -6,7 +6,7 @@
 
 # Model
 model_name="char"
-# model_name="raw"
+model_name="raw"
 # model_name="pinyin"
 # model_name="pinyin_no_index"
 
@@ -36,7 +36,7 @@ do
     train_cmd+=" --batch_size 16"
     train_cmd+=" --grad_acc_steps 2"
     train_cmd+=" --log_interval 10"
-    train_cmd+=" --epochs 2"
+    train_cmd+=" --epochs 5"
     # train_cmd+=" --num_examples 1024"
 
     logfile="${output_dir}/train.log"
