@@ -12,14 +12,14 @@ model="pinyin_no_index"
 
 # train_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
 train_dir="datasets/realtypo/cmrc"  # READIN-CMRC
-train_dir="datasets/cmrc/split"     # SCT-CMRC
+# train_dir="datasets/cmrc/split"     # SCT-CMRC
 
-for seed in {1..1}
+for seed in {0..0}
 do
     ckpt="/home/chenyingfa/models/${model}.pt"
-    # output_dir="results/da_noise/cmrc/${model}_seed${seed}"
+    output_dir="results/da_noise/cmrc/${model}_seed${seed}"
     # output_dir="results/cmrc/${model}_twolevel_seed${seed}"
-    output_dir="results/cmrc/${model}_seed${seed}"
+    # output_dir="results/cmrc/${model}_seed${seed}"
 
     # Global args
     cmd="python3 run_cmrc.py"
