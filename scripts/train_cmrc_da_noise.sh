@@ -1,3 +1,5 @@
+# NOTE: This is deprecated
+
 #!/bin/bash
 #SBATCH -G 1
 #_ SBATCH -p rtx2080

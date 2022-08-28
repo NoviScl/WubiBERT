@@ -1,3 +1,5 @@
+# NOTE: This is deprecated
+
 
 data_dir="/home/chenyingfa/WubiBERT/datasets/realtypo/cmrc"
 test_name="test_clean"
