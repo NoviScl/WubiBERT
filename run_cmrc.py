@@ -389,6 +389,7 @@ def load_model(config_file: str, init_ckpt: str) -> Module:
 
 
 def get_best_ckpt(output_dir: Path) -> Path:
+    print(f'Getting best checkpoint in {output_dir}')
     max_acc = float('-inf')
     best_ckpt = None
     for ckpt_dir in output_dir.glob('ckpt-*'):
@@ -399,6 +400,7 @@ def get_best_ckpt(output_dir: Path) -> Path:
         if acc > max_acc:
             max_acc = acc
             best_ckpt = ckpt_dir / 'ckpt.pt'
+    assert best_ckpt is not None, 'No best checkpoint found'
     return best_ckpt
 
 
@@ -628,7 +630,7 @@ def test(args):
 
     # Prepare model
     # best_ckpt = output_dir / modeling.FILENAME_BEST_MODEL
-    if args.test_ckpt:
+    if args.test_ckpt is not None:
         best_ckpt = args.test_ckpt
     else:
         best_ckpt = get_best_ckpt(output_dir)
