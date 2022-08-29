@@ -7,13 +7,13 @@
 # Model
 model_name="char"
 # model_name="raw"
-model_name="pinyin"
-model_name="pinyin_no_index"
+# model_name="pinyin"
+# model_name="pinyin_no_index"
 
 # data_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
 train_dir="datasets/cmrc/split"  # Ordinary training data
 
-for seed in {1..1}
+for seed in {0..0}
 do
     ckpt="/home/chenyingfa/models/${model_name}.pt"
     # output_dir="results/da_noise/cmrc/${model_name}_seed${seed}"
@@ -46,8 +46,8 @@ do
     # Testing
     test_names=""
     test_names+="test_clean"
-    # test_names+=" test_noisy_keyboard_1 test_noisy_keyboard_2 test_noisy_keyboard_3"
-    # test_names+=" test_noisy_asr_1 test_noisy_asr_2 test_noisy_asr_3"
+    test_names+=" test_noisy_keyboard_1 test_noisy_keyboard_2 test_noisy_keyboard_3"
+    test_names+=" test_noisy_asr_1 test_noisy_asr_2 test_noisy_asr_3"
     for test_name in $test_names
     do
         # cmd+=" --test_ckpt ${output_dir}/ckpt-1567/ckpt.pt"
