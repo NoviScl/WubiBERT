@@ -125,8 +125,8 @@ def change_pinyin(orig_data, ratio):
             else:
                 new_eg[key] = eg[key]
         data.append(new_eg)
-    print(f'{changed_chars = }')
-    print ("changed ratio: ", changed_chars / total_chars)
+    # print(f'{changed_chars = }')
+    print("changed ratio: ", changed_chars / total_chars)
     return data
 
 
@@ -137,7 +137,7 @@ def change_wubi(orig_data, ratio=1):
     changed_chars = 0
     total_chars = 0
     for eg in orig_data:
-        for key in TEXT_KEYS:
+        for key in NOISE_KEYS:
             newsent, changed, total = _add_noise(eg[key], ratio, ch2wubi, same_dict_wubi)
             changed_chars += changed
             total_chars += total
@@ -173,16 +173,24 @@ def gen_phonetic_data(clean_data, ratio):
     return all_data
 
 
-def main():
+if __name__ == '__main__':
     filename = 'train.json'
+
+    # AFQMC (balanced)
     # FILE_SRC = Path('datasets/realtypo/afqmc_balanced', filename)
     # FILE_DST = Path('datasets/realtypo/afqmc_balanced_da_noise/phonetic_50', filename)
     
-    FILE_SRC = Path('datasets/realtypo/cmrc', filename)
-    FILE_DST = Path('datasets/realtypo/cmrc_da_noise/phonetic_50', filename)
-    
-    orig_data = _read_json(FILE_SRC)
+    # CMRC2018
+    # FILE_SRC = Path('datasets/realtypo/cmrc', filename)
+    # FILE_DST = Path('datasets/realtypo/cmrc_da_noise/phonetic_50', filename)
 
+    # CSpider
+    FILE_SRC = Path('/home/chenyingfa/data/readin/cspider', filename)
+    FILE_DST = Path('/home/chenyingfa/data/readin/cspider_da_noise', filename)
+
+    print(FILE_SRC, FILE_DST)
+    # exit()    
+    orig_data = _read_json(FILE_SRC)
     FILE_DST.parent.mkdir(parents=True, exist_ok=True)
 
     # def gen_glyph_data(ratios):
@@ -200,7 +208,3 @@ def main():
     data = gen_phonetic_data(orig_data, 0.5)
     print(f'Dumping to {FILE_DST}')
     _dump_json(data, FILE_DST)
-
-
-if __name__ == '__main__':
-    main()

@@ -5,6 +5,7 @@ __pycache__/
 datasets/*
 logs/*
 results/*
+result/*
 tokenize_results/*
 checkpoints/*
 cmrc_debug/*
