@@ -302,18 +302,22 @@ class BertNonFusedLayerNorm(nn.Module):
         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
         return self.weight * x + self.bias
 
-try:
-    import apex
-    #apex.amp.register_half_function(apex.normalization.fused_layer_norm, 'FusedLayerNorm')
-    import apex.normalization
-    from apex.normalization.fused_layer_norm import FusedLayerNormAffineFunction
-    #apex.amp.register_float_function(apex.normalization.FusedLayerNorm, 'forward')
-    #BertLayerNorm = apex.normalization.FusedLayerNorm
-    APEX_IS_AVAILABLE = True
-except ImportError:
-    print("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex.")
-    #BertLayerNorm = BertNonFusedLayerNorm
-    APEX_IS_AVAILABLE = False
+
+APEX_IS_AVAILABLE = False
+# try:
+#     import apex
+#     #apex.amp.register_half_function(apex.normalization.fused_layer_norm, 'FusedLayerNorm')
+#     import apex.normalization
+#     from apex.normalization.fused_layer_norm import FusedLayerNormAffineFunction
+#     #apex.amp.register_float_function(apex.normalization.FusedLayerNorm, 'forward')
+#     #BertLayerNorm = apex.normalization.FusedLayerNorm
+#     APEX_IS_AVAILABLE = True
+# except ImportError:
+#     print("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex.")
+#     #BertLayerNorm = BertNonFusedLayerNorm
+#     APEX_IS_AVAILABLE = False
+
+
 class BertLayerNorm(Module):
     def __init__(self, hidden_size, eps=1e-12):
         super(BertLayerNorm, self).__init__()
