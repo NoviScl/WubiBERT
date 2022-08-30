@@ -19,11 +19,9 @@ from __future__ import absolute_import, division, print_function
 
 from pathlib import Path
 import argparse
-# import logging
 import os
 import json
 from time import time
-# from shutil import copyfile
 
 import numpy as np
 import torch
@@ -35,53 +33,22 @@ import modeling
 from optimization import BertAdam
 from schedulers import LinearWarmUpScheduler
 # from apex import amp
-from sklearn.metrics import matthews_corrcoef, f1_score
-import utils
-from utils import is_main_process
+from sklearn.metrics import f1_score
+from utils import is_main_process, auto_tokenizer, set_seed
 from processors.glue import PROCESSORS, convert_examples_to_features
 
-# torch._C._jit_set_profiling_mode(False)
-# torch._C._jit_set_profiling_executor(False)
-
-# logging.basicConfig(
-#     format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-#     datefmt='%m/%d/%Y %H:%M:%S',
-#     level=logging.INFO,
-# )
-# logger = logging.getLogger(__name__)
 
 FILENAME_BEST_MODEL = 'best_model.bin'
 FILENAME_TEST_RESULT = 'result_test.txt'
 
-def compute_metrics(task_name, preds, labels):
+
+def compute_metrics(task_name: str, preds, labels) -> dict:
     assert len(preds) == len(labels)
-    if task_name == "cola":
-        return {"mcc": matthews_corrcoef(labels, preds)}
-    # elif task_name == "sst-2":
-    #     return {"acc": simple_accuracy(preds, labels)}
-    # elif task_name == "mrpc":
-    #     return acc_and_f1(preds, labels)
-    # elif task_name == "sts-b":
-        # return pearson_and_spearman(preds, labels)
-    elif task_name == "qqp":
-        return acc_and_f1(preds, labels)
-    elif task_name == "mnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "mnli-mm":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "qnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "rte":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "wnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    else:
-        # use acc for other classification tasks. Add exceptions above.
-        return {
-            "acc": simple_accuracy(preds, labels),
-            "macro_f1": f1_score(labels, preds, average='macro'),
-            'micro_f1': f1_score(labels, preds, average='micro'),
-        }
+    return {
+        "acc": simple_accuracy(preds, labels),
+        "macro_f1": f1_score(labels, preds, average='macro'),
+        'micro_f1': f1_score(labels, preds, average='micro'),
+    }
 
 
 def simple_accuracy(preds, labels):
@@ -198,36 +165,36 @@ def init_optimizer_and_amp(model, lr, loss_scale, warmup_proportion,
     ]
     optimizer, scheduler = None, None
     if use_fp16:
-        print("using fp16")
-        try:
-            from apex.optimizers import FusedAdam
-        except ImportError:
-            raise ImportError("Please install apex from "
-                              "https://www.github.com/nvidia/apex to use "
-                              "distributed and fp16 training.")
+        raise NotImplementedError("fp16 not supported")
+        # try:
+        #     from apex.optimizers import FusedAdam
+        # except ImportError:
+        #     raise ImportError("Please install apex from "
+        #                       "https://www.github.com/nvidia/apex to use "
+        #                       "distributed and fp16 training.")
 
-        if num_train_optimization_steps is not None:
-            optimizer = FusedAdam(
-                optimizer_grouped_parameters,
-                lr=lr,
-                bias_correction=False,
-            )
-        amp_inits = amp.initialize(
-            model,
-            optimizers=optimizer,
-            opt_level="O2",
-            keep_batchnorm_fp32=False,
-            loss_scale="dynamic" if loss_scale == 0 else loss_scale,
-        )
-        model, optimizer = (amp_inits
-                            if num_train_optimization_steps is not None else
-                            (amp_inits, None))
-        if num_train_optimization_steps is not None:
-            scheduler = LinearWarmUpScheduler(
-                optimizer,
-                warmup=warmup_proportion,
-                total_steps=num_train_optimization_steps,
-            )
+        # if num_train_optimization_steps is not None:
+        #     optimizer = FusedAdam(
+        #         optimizer_grouped_parameters,
+        #         lr=lr,
+        #         bias_correction=False,
+        #     )
+        # amp_inits = amp.initialize(
+        #     model,
+        #     optimizers=optimizer,
+        #     opt_level="O2",
+        #     keep_batchnorm_fp32=False,
+        #     loss_scale="dynamic" if loss_scale == 0 else loss_scale,
+        # )
+        # model, optimizer = (amp_inits
+        #                     if num_train_optimization_steps is not None else
+        #                     (amp_inits, None))
+        # if num_train_optimization_steps is not None:
+        #     scheduler = LinearWarmUpScheduler(
+        #         optimizer,
+        #         warmup=warmup_proportion,
+        #         total_steps=num_train_optimization_steps,
+        #     )
     else:
         print("using fp32")
         if num_train_optimization_steps is not None:
@@ -421,7 +388,8 @@ def train(args):
     print('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
-    tokenizer = utils.load_tokenizer(args)
+    # tokenizer = utils.load_tokenizer(args)
+    tokenizer = auto_tokenizer(args.tokenizer_name)
 
     # Setup output files
     # output_dir = os.path.join(args.output_dir, str(args.seed))
@@ -434,8 +402,7 @@ def train(args):
     train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     num_opt_steps = len(train_dataloader) // args.grad_acc_steps * args.epochs
 
-
-    utils.set_seed(args.seed)
+    set_seed(args.seed)
     # Prepare model
     modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
     print('Loading model from "{}"...'.format(args.init_ckpt))
@@ -568,13 +535,14 @@ def test(args):
     output_dir = Path(args.output_dir, args.test_name)
     output_dir.mkdir(parents=True, exist_ok=True)
     device = get_device(args)
-    utils.set_seed(args.seed)
+    set_seed(args.seed)
 
     # Tokenizer and processor
     print('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
-    tokenizer = utils.load_tokenizer(args)
+    # tokenizer = utils.load_tokenizer(args)
+    tokenizer = auto_tokenizer(args.tokenizer_name)
 
     # Load best model
     if args.test_model:
