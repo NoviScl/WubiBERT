@@ -72,39 +72,39 @@ def acc_and_f1(preds, labels):
 # from apex.multi_tensor_apply import multi_tensor_applier
 
 
-class GradientClipper:
-    """
-    Clips gradient norm of an iterable of parameters.
-    """
+# class GradientClipper:
+#     """
+#     Clips gradient norm of an iterable of parameters.
+#     """
 
-    def __init__(self, max_grad_norm):
-        self.max_norm = max_grad_norm
-        if multi_tensor_applier.available:
-            import amp_C
-            self._overflow_buf = torch.cuda.IntTensor([0])
-            self.multi_tensor_l2norm = amp_C.multi_tensor_l2norm
-            self.multi_tensor_scale = amp_C.multi_tensor_scale
-        else:
-            raise RuntimeError('Gradient clipping requires cuda extensions')
+#     def __init__(self, max_grad_norm):
+#         self.max_norm = max_grad_norm
+#         if multi_tensor_applier.available:
+#             import amp_C
+#             self._overflow_buf = torch.cuda.IntTensor([0])
+#             self.multi_tensor_l2norm = amp_C.multi_tensor_l2norm
+#             self.multi_tensor_scale = amp_C.multi_tensor_scale
+#         else:
+#             raise RuntimeError('Gradient clipping requires cuda extensions')
 
-    def step(self, parameters):
-        l = [p.grad for p in parameters if p.grad is not None]
-        total_norm, _ = multi_tensor_applier(
-            self.multi_tensor_l2norm,
-            self._overflow_buf,
-            [l],
-            False,
-        )
-        total_norm = total_norm.item()
-        if (total_norm == float('inf')): return
-        clip_coef = self.max_norm / (total_norm + 1e-6)
-        if clip_coef < 1:
-            multi_tensor_applier(
-                self.multi_tensor_scale,
-                self._overflow_buf,
-                [l, l],
-                clip_coef,
-            )
+#     def step(self, parameters):
+#         l = [p.grad for p in parameters if p.grad is not None]
+#         total_norm, _ = multi_tensor_applier(
+#             self.multi_tensor_l2norm,
+#             self._overflow_buf,
+#             [l],
+#             False,
+#         )
+#         total_norm = total_norm.item()
+#         if (total_norm == float('inf')): return
+#         clip_coef = self.max_norm / (total_norm + 1e-6)
+#         if clip_coef < 1:
+#             multi_tensor_applier(
+#                 self.multi_tensor_scale,
+#                 self._overflow_buf,
+#                 [l, l],
+#                 clip_coef,
+#             )
 
 
 def parse_args(p=argparse.ArgumentParser()):
@@ -113,12 +113,18 @@ def parse_args(p=argparse.ArgumentParser()):
     p.add_argument('--dev_dir', type=str)
     p.add_argument('--test_dir', type=str)
     p.add_argument("--task_name", type=str, required=True)
-    p.add_argument("--output_dir", type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
-    p.add_argument("--init_ckpt", type=str, required=True, help="The checkpoint file from pretraining",)
-    p.add_argument('--tokenizer_type', type=str, required=True, help="Type of tokenizer")
-    p.add_argument('--vocab_file', type=str, required=True, help="Vocabulary mapping/file BERT was pretrainined on")
-    p.add_argument('--vocab_model_file', type=str, required=True, help="Model file for sentencepiece")
-    p.add_argument("--config_file", type=str, required=True, help="The BERT model config")
+    p.add_argument(
+        "--output_dir", type=str, required=True, 
+        help="The output directory where the model predictions and checkpoints will be written.")
+    p.add_argument(
+        "--init_ckpt", type=str, required=True, 
+        help="The checkpoint file from pretraining",)
+    p.add_argument('--tokenizer_name')
+    # p.add_argument('--tokenizer_type', type=str, required=True, help="Type of tokenizer")
+    # p.add_argument('--vocab_file', type=str, required=True, help="Vocabulary mapping/file BERT was pretrainined on")
+    # p.add_argument('--vocab_model_file', type=str, required=True, help="Model file for sentencepiece")
+    p.add_argument(
+        "--config_file", type=str, required=True, help="The BERT model config")
     p.add_argument('--test_name', default='test_clean')
 
     ## Other parameters
@@ -129,12 +135,17 @@ def parse_args(p=argparse.ArgumentParser()):
     p.add_argument("--eval_batch_size", default=8, type=int)
     p.add_argument("--lr", default=2e-5, type=float)
     p.add_argument("--epochs", default=-1, type=int)
-    p.add_argument("--warmup_prop", default=0.1, type=float, help="Proportion of training to perform linear learning rate warmup ")
-    p.add_argument("--no_cuda", action='store_true', help="If true, don't use CUDA")
+    p.add_argument(
+        "--warmup_prop", default=0.1, type=float, 
+        help="Proportion of training to perform linear learning rate warmup ")
+    p.add_argument(
+        "--no_cuda", action='store_true', help="If true, don't use CUDA")
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--grad_acc_steps', type=int, default=1)
     p.add_argument('--loss_scale', type=float, default=0)
-    p.add_argument('--skip_checkpoint', action='store_true', help="Whether to save checkpoints")
+    p.add_argument(
+        '--skip_checkpoint', action='store_true', 
+        help="Whether to save checkpoints")
     p.add_argument('--two_level_embeddings', action="store_true")
     p.add_argument('--tokenize_char_by_char', action="store_true")
     p.add_argument('--fewshot', type=int, default=0)
@@ -274,7 +285,8 @@ def load_model(config_file, filename, num_labels):
     # Padding for divisibility by 8
     if config.vocab_size % 8 != 0:
         config.vocab_size += 8 - (config.vocab_size % 8)
-    model = modeling.BertForSequenceClassification(config, num_labels=num_labels)
+    model = modeling.BertForSequenceClassification(
+        config, num_labels=num_labels)
     state_dict = torch.load(filename, map_location='cpu')
     model.load_state_dict(state_dict["model"], strict=False)
     return model
@@ -328,13 +340,21 @@ def evaluate(
 
     for i, batch in tqdm(enumerate(dataloader), desc="Evaluating"):
         batch = tuple(t.to(device) for t in batch)
-        (input_ids, input_mask, segment_ids, label_ids,
-         token_ids, pos_left, pos_right) = expand_batch(batch, two_level_embeddings)
+        (
+            input_ids, 
+            input_mask, 
+            segment_ids, 
+            label_ids,
+            token_ids, 
+            pos_left, 
+            pos_right,
+        ) = expand_batch(batch, two_level_embeddings)
 
         with torch.no_grad():
-            logits = model(input_ids, segment_ids, input_mask,
-                           token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                           use_token_embeddings=two_level_embeddings)
+            logits = model(
+                input_ids, segment_ids, input_mask,
+                token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
+                use_token_embeddings=two_level_embeddings)
             total_loss += loss_fct(
                 logits.view(-1, num_labels),
                 label_ids.view(-1),
@@ -374,8 +394,10 @@ def get_datasets(tokenizer, args, processor):
     train_features = get_features(train_examples, tokenizer, processor, args)
     dev_examples = processor.get_dev_examples(args.dev_dir)
     dev_features = get_features(dev_examples, tokenizer, processor, args)
-    train_data = gen_tensor_dataset(train_features, two_level_embeddings=args.two_level_embeddings)
-    dev_data = gen_tensor_dataset(dev_features, two_level_embeddings=args.two_level_embeddings)
+    train_data = gen_tensor_dataset(
+        train_features, two_level_embeddings=args.two_level_embeddings)
+    dev_data = gen_tensor_dataset(
+        dev_features, two_level_embeddings=args.two_level_embeddings)
     return train_data, dev_data
 
 
@@ -399,7 +421,10 @@ def train(args):
     # Load data
     print('Getting training features...')
     train_dataset, dev_dataset = get_datasets(tokenizer, args, processor)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+    train_dataloader = DataLoader(
+        train_dataset, 
+        batch_size=args.train_batch_size, 
+        shuffle=True)
     num_opt_steps = len(train_dataloader) // args.grad_acc_steps * args.epochs
 
     set_seed(args.seed)
@@ -437,15 +462,30 @@ def train(args):
         model.train()
         total_train_loss = 0
         for step, batch in enumerate(train_dataloader):
-            # print(step, flush=True)
             batch = tuple(t.to(device) for t in batch)
-            (input_ids, input_mask, segment_ids, label_ids,
-             token_ids, pos_left, pos_right) = expand_batch(batch, args.two_level_embeddings)
+            (
+                input_ids, 
+                input_mask, 
+                segment_ids, 
+                label_ids,
+                token_ids, 
+                pos_left, 
+                pos_right,
+            ) = expand_batch(
+                batch, 
+                args.two_level_embeddings,
+            )
             
             # Forward pass
-            logits = model(input_ids, segment_ids, input_mask,
-                            token_ids=token_ids, pos_left=pos_left, pos_right=pos_right,
-                            use_token_embeddings=args.two_level_embeddings)
+            logits = model(
+                input_ids, 
+                segment_ids, 
+                input_mask,
+                token_ids=token_ids, 
+                pos_left=pos_left, 
+                pos_right=pos_right,
+                use_token_embeddings=args.two_level_embeddings,
+            )
             loss = loss_fct(
                 logits.view(-1, num_labels),
                 label_ids.view(-1),
@@ -501,7 +541,6 @@ def train(args):
 
             # Save checkpoint
             if not args.skip_checkpoint:
-                # model_to_save = model.module if hasattr(model, 'module') else model
                 ckpt_dir = output_dir / f'ckpt-{ep}'
                 ckpt_dir.mkdir(exist_ok=True, parents=True)
                 ckpt_file = ckpt_dir / f'model.pt'
@@ -531,7 +570,6 @@ def get_best_ckpt(output_dir: Path) -> Path:
 
 def test(args):
     # Setup output files
-    # output_dir = os.path.join(args.output_dir, str(args.seed))
     output_dir = Path(args.output_dir, args.test_name)
     output_dir.mkdir(parents=True, exist_ok=True)
     device = get_device(args)
@@ -541,7 +579,6 @@ def test(args):
     print('Loading processor and tokenizer...')
     processor = PROCESSORS[args.task_name]()
     num_labels = len(processor.get_labels())
-    # tokenizer = utils.load_tokenizer(args)
     tokenizer = auto_tokenizer(args.tokenizer_name)
 
     # Load best model
@@ -559,7 +596,8 @@ def test(args):
     examples = processor.get_test_examples(args.test_dir)
     features = get_features(examples, tokenizer, processor, args)
     examples = examples[:len(features)]
-    dataset = gen_tensor_dataset(features, two_level_embeddings=args.two_level_embeddings)
+    dataset = gen_tensor_dataset(
+        features, two_level_embeddings=args.two_level_embeddings)
 
     result = evaluate(
         model,
@@ -567,11 +605,17 @@ def test(args):
         batch_size=args.eval_batch_size,
         task_name=args.task_name,
         num_labels=num_labels,
-        two_level_embeddings=args.two_level_embeddings)
+        two_level_embeddings=args.two_level_embeddings,
+    )
 
     # Save result
     print(f'Dumping results to {output_dir}')
-    json.dump(result['preds'].tolist(), open(output_dir / 'preds.json', 'w'), indent=2, ensure_ascii=False)
+    json.dump(
+        result['preds'].tolist(), 
+        open(output_dir / 'preds.json', 'w'), 
+        indent=2, 
+        ensure_ascii=False,
+    )
     del result['preds']
     json.dump(result, open(output_dir / 'result.json', 'w'), ensure_ascii=False)
     print(result)
@@ -593,7 +637,8 @@ def main(args):
 
     # Sanity check on arguments
     if not args.do_train and not args.do_test:
-        raise ValueError("At least one of `do_train` or `do_test` must be True.")
+        raise ValueError(
+            "At least one of `do_train` or `do_test` must be True.")
     if args.grad_acc_steps < 1:
         raise ValueError("Invalid grad_acc_steps parameter: {}, "
                          "should be >= 1".format(

@@ -10,8 +10,9 @@ model_name="char"
 # model_name="pinyin"
 # model_name="pinyin_no_index"
 
-# data_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
-train_dir="datasets/cmrc/split"  # Ordinary training data
+# train_dir="datasets/realtypo/cmrc_da_noise/phonetic_50"  # Noise DA training data
+train_dir="datasets/realtypo/cmrc"  # READIN-CMRC
+# train_dir="datasets/cmrc/split"     # SCT-CMRC
 
 for seed in {0..0}
 do
@@ -23,7 +24,7 @@ do
     cmd="python3 run_cmrc.py"
     cmd+=" --output_dir ${output_dir}"
     cmd+=" --config_file configs/bert_config_vocab22675.json"
-    cmd+=" --tokenizer_name ${model_name}"
+    cmd+=" --tokenizer_name ${model}"
     cmd+=" --seed $seed"
 
     # Training
